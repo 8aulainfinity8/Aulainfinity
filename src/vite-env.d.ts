@@ -1,0 +1,26 @@
+
+// FIX: Removed the `vite/client` reference which caused a "Cannot find type definition file" error.
+// The manual definitions below are used as a fallback.
+
+// FIX: Manually define ImportMeta and ImportMetaEnv to resolve errors when vite/client types are not loaded.
+interface ImportMetaEnv {
+  readonly VITE_FIREBASE_API_KEY: string
+  readonly VITE_FIREBASE_AUTH_DOMAIN: string
+  readonly VITE_FIREBASE_PROJECT_ID: string
+  readonly VITE_FIREBASE_STORAGE_BUCKET: string
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string
+  readonly VITE_FIREBASE_APP_ID: string
+  readonly VITE_ADMIN_EMAILS?: string
+  readonly DEV: boolean
+  readonly PROD: boolean
+  readonly MODE: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}
+
+declare module "*.png" {
+  const value: string;
+  export default value;
+}

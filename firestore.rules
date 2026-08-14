@@ -1,0 +1,308 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token != null && "role" in request.auth.token && request.auth.token.role == 'admin') ||
+        (request.auth.token != null && "email" in request.auth.token && request.auth.token.email.lower() == '8aulainfinity8@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && (
+        (request.auth.token != null && "role" in request.auth.token && request.auth.token.role == 'teacher') ||
+        exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') ||
+        isAdmin()
+      );
+    }
+
+    // Global Config
+    match /app_config/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Courses & Subcollections
+    match /courses/{courseId} {
+      allow read: if true;
+      allow write: if isTeacher();
+      match /{allSubcollections=**} {
+        allow read: if true;
+        allow write: if isTeacher();
+      }
+    }
+
+    // Videos
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if isTeacher();
+    }
+
+    // Class Recordings
+    match /classRecordings/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
+    }
+
+    // User Profiles & Roles (Strict protection against privilege escalation)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(userId) && (!("role" in request.resource.data) || request.resource.data.role == 'student'))
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(userId) && 
+         (!("role" in request.resource.data) || request.resource.data.role == resource.data.role) &&
+         (!("isSubscribed" in request.resource.data) || request.resource.data.isSubscribed == resource.data.isSubscribed) &&
+         (!("credits" in request.resource.data) || request.resource.data.credits == resource.data.credits)
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /firestore_users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(userId) && (!("role" in request.resource.data) || request.resource.data.role == 'student'))
+      );
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(userId) && 
+         (!("role" in request.resource.data) || request.resource.data.role == resource.data.role) &&
+         (!("isSubscribed" in request.resource.data) || request.resource.data.isSubscribed == resource.data.isSubscribed) &&
+         (!("credits" in request.resource.data) || request.resource.data.credits == resource.data.credits)
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isOwner(studentId) || isTeacher());
+    }
+
+    match /teachers/{teacherId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isOwner(teacherId) || isAdmin());
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Progress Log
+    match /student_course_progress/{progressId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Tutoring Requests
+    match /firestore_tutoring_requests/{requestId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Direct Messages & Group Messages
+    match /firestore_direct_messages/{id} {
+      allow read, write: if isSignedIn();
+    }
+    
+    match /firestore_peer_messages/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_teacher_messages/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_course_messages/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_course_group_messages/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_conversations/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_closed_conversations/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firestore_peer_conversations/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Chats & Voice Calling (Protected for authenticated users)
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /rooms/{roomId} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /calls/{callId} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /voice_group_calls/{callId} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /voiceRooms/{id} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // Diagnostic connection test collection
+    match /test/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Whiteboard Cursors
+    match /whiteboardCursors/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Whiteboard & Meta
+    match /whiteboards/{id} {
+      allow read, write: if isSignedIn();
+      match /{allSubcollections=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /whiteboardMeta/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Homework agenda
+    match /firestore_agenda_events/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Video lesson comments
+    match /firestore_comments/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Student topic proposals
+    match /firestore_topic_requests/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Quizzes & Answers
+    match /firestore_quizzes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
+    }
+
+    match /firestore_student_answers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Coins, finance and billing
+    match /infinity_transactions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /firestore_infinity_transactions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /student_payments/{id} {
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.studentId == request.auth.uid));
+      allow write: if isAdmin();
+    }
+
+    match /firestore_student_payments/{id} {
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.studentId == request.auth.uid));
+      allow write: if isAdmin();
+    }
+
+    match /student_expenses/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /firestore_student_expenses/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /teacher_payments/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource != null && resource.data.teacherId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /firestore_teacher_payments/{id} {
+      allow read: if isAdmin() || (isSignedIn() && resource != null && resource.data.teacherId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // Friend list
+    match /student_friends/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // AI Chat History logs
+    match /ai_query_logs/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Deleted items list
+    match /firestore_deleted_items/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Notification states
+    match /firestore_user_seen_states/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Whatsapp triggers
+    match /whatsapp_queue/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /whatsapp_logs/{id} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
