@@ -960,7 +960,7 @@ export const assignUserRoleByEmail = async (data: { email: string; role: 'studen
     await apiDelay(300);
     if (db) {
         try {
-            const usersRef = collection(db, 'users');
+            const usersRef = collection(db, 'firestore_users');
             const qEmail = query(usersRef, where('email', '==', data.email.trim().toLowerCase()));
             const snap = await getDocs(qEmail);
             if (!snap.empty) {
@@ -972,7 +972,7 @@ export const assignUserRoleByEmail = async (data: { email: string; role: 'studen
                     role: data.role,
                     ...(data.role === 'teacher' ? { category: data.category || existingData.category || 'General', isApprovedForTutoring: true } : {})
                 };
-                await setDoc(doc(db, 'users', uid), { ...updatedUser, updatedAt: serverTimestamp() }, { merge: true });
+                await setDoc(doc(db, 'firestore_users', uid), { ...updatedUser, updatedAt: serverTimestamp() }, { merge: true });
                 if (data.role === 'teacher') {
                     await setDoc(doc(db, 'teachers', uid), { ...updatedUser, updatedAt: serverTimestamp() }, { merge: true });
                     await deleteDoc(doc(db, 'students', uid)).catch(() => {});
@@ -1614,9 +1614,12 @@ export const assignConversationTeacher = async (conversationId: string, teacherI
     const convo = dbMock.dbAssignConversation(conversationId, teacherId);
     const studentId = conversationId.replace('direct_', '');
     const users = dbMock.dbFetchUsers();
-    const student = users.find(u => u.id === studentId || u.id === conversationId);
+    const student = users.find(u => u.id === studentId || u.id === conversationId || u.id === convo.studentId);
     if (student) {
-        await syncUserToFirestore(student, 'student');
+        await assignStudentTeacher(student.id, teacherId);
+    } else {
+        const teacher = teacherId ? (dbMock.teachersData || []).find(t => t.id === teacherId) : null;
+        await syncConversationTeacherInFirestore(conversationId, teacherId, teacher?.name || null);
     }
     return convo;
 };
@@ -1832,11 +1835,17 @@ export const sendWhatsApp = async (data: {
     }
 
     try {
+        const idToken = auth?.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+        if (idToken) {
+            headers['Authorization'] = `Bearer ${idToken}`;
+        }
+
         const response = await fetch('/api/send-whatsapp', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify(data)
         });
         const res = await response.json();

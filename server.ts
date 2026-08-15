@@ -2,11 +2,74 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+
+// Initialize Firebase Admin (Only if not already initialized)
+if (!getApps().length) {
+  try {
+    initializeApp();
+  } catch (e) {
+    console.error("Firebase admin init error", e);
+  }
+}
+
+// authenticateUser Middleware
+export const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+  }
+  
+  const token = authHeader.split('Bearer ')[1];
+  
+  try {
+    const decodedToken = await getAuth().verifyIdToken(token);
+    const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
+    decodedToken.role = isMasterAdmin ? 'admin' : (decodedToken.role || 'student');
+    (req as any).user = decodedToken;
+    next();
+  } catch (error) {
+    console.error('Error verifying auth token', error);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+};
+
+// requireRole Middleware
+export const requireRole = (allowedRoles: string[]) => {
+  return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    }
+    
+    const token = authHeader.split('Bearer ')[1];
+    
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
+      const role = isMasterAdmin ? 'admin' : (decodedToken.role || 'student');
+      
+      if (!allowedRoles.includes(role)) {
+        return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
+      }
+      
+      // Inject decoded user to req
+      decodedToken.role = role;
+      (req as any).user = decodedToken;
+      next();
+    } catch (error) {
+      console.error('Error verifying auth token', error);
+      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    }
+  };
+};
+
 // In production, Vite is not installed as a dependency, so we dynamically import it inside the development block below
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
@@ -56,22 +119,60 @@ async function startServer() {
   // Keep track of connections inside rooms (courseId -> Set of WebSockets)
   const rooms = new Map<string, Set<{ ws: WebSocket; isTeacher: boolean }>>();
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", async (ws, req) => {
     let activeCourseId: string | null = null;
     let isTeacher = false;
+    let userId = "anonymous";
+    let messageCount = 0;
+    let lastReset = Date.now();
 
-    ws.on("message", (messageStr) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+      const token = url.searchParams.get("token");
+      if (!token) {
+        ws.close(1008, "Token required");
+        return;
+      }
+      const decodedToken = await getAuth().verifyIdToken(token);
+      const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
+      userId = decodedToken.uid;
+      isTeacher = isMasterAdmin || decodedToken.role === "teacher" || decodedToken.role === "admin";
+    } catch (err) {
+      console.error("WebSocket auth error:", err);
+      ws.close(1008, "Invalid token");
+      return;
+    }
+
+    ws.on("message", (messageData) => {
       try {
-        const message = JSON.parse(messageStr.toString());
+        // 1. Abuse Protection: Drop oversized messages (> 64KB)
+        const buffer = Buffer.isBuffer(messageData) ? messageData : Buffer.from(messageData as any);
+        if (buffer.length > 65536) {
+          console.warn(`[WS ABUSE] Dropping oversized message (${buffer.length} bytes) from user ${userId}`);
+          return;
+        }
+
+        // 2. Abuse Protection: Rate limit per connection (max 60 msg/s)
+        const now = Date.now();
+        if (now - lastReset > 1000) {
+          messageCount = 0;
+          lastReset = now;
+        }
+        messageCount++;
+        if (messageCount > 60) {
+          // Drop message exceeding rate limit
+          return;
+        }
+
+        const message = JSON.parse(buffer.toString("utf-8"));
         
         if (message.type === "join") {
-          const { courseId, role } = message;
-          if (!courseId) return;
+          const { courseId } = message;
+          if (!courseId || typeof courseId !== "string" || courseId.length > 128) return;
 
           activeCourseId = courseId;
-          isTeacher = role === "teacher";
 
-          // Intialize room if not exists
+          // Initialize room if not exists
           if (!rooms.has(courseId)) {
             rooms.set(courseId, new Set());
           }
@@ -82,16 +183,23 @@ async function startServer() {
 
         if (message.type === "cursor") {
           const { courseId, x, y, active } = message;
-          if (!courseId) return;
+          if (!courseId || typeof courseId !== "string" || courseId !== activeCourseId) return;
+          
+          // Coordinate sanitization
+          const safeX = typeof x === "number" && Number.isFinite(x) ? Math.max(-10000, Math.min(10000, x)) : 0;
+          const safeY = typeof y === "number" && Number.isFinite(y) ? Math.max(-10000, Math.min(10000, y)) : 0;
+          const safeActive = active !== false;
 
           const roomClients = rooms.get(courseId);
           if (roomClients) {
             const broadcastPayload = JSON.stringify({
               type: "cursor",
               courseId,
-              x,
-              y,
-              active,
+              userId,
+              isTeacher,
+              x: safeX,
+              y: safeY,
+              active: safeActive,
               updatedAt: Date.now()
             });
 
@@ -151,8 +259,8 @@ async function startServer() {
     res.json({ status: "ok", ws_rooms: rooms.size });
   });
 
-  // WhatsApp notification endpoint (Protected with rate limiting: max 20 msgs / min per IP)
-  app.post("/api/send-whatsapp", rateLimit(20, 60 * 1000), async (req, res) => {
+  // WhatsApp notification endpoint (Protected: Teachers/Admins only with rate limiting)
+  app.post("/api/send-whatsapp", rateLimit(20, 60 * 1000), requireRole(['admin', 'teacher', 'profesor']), async (req, res) => {
     const { 
       to, 
       message, 
@@ -474,11 +582,14 @@ async function startServer() {
     }
   });
 
-  // --- LIVEKIT TOKEN GENERATION ENDPOINT (Protected with rate limiting: max 30 tokens / min per IP) ---
-  app.get("/api/livekit/token", rateLimit(30, 60 * 1000), async (req, res) => {
-    const { room, username } = req.query;
-    if (!room || !username) {
-      return res.status(400).json({ success: false, error: "Faltan los parámetros 'room' y 'username'." });
+  // --- LIVEKIT TOKEN GENERATION ENDPOINT (Protected: Authenticated users only, rate limiting: max 30 tokens / min per IP) ---
+  app.get("/api/livekit/token", rateLimit(30, 60 * 1000), authenticateUser, async (req, res) => {
+    const { room } = req.query;
+    const user = (req as any).user;
+    const username = user?.name || user?.email?.split('@')[0] || user?.uid || req.query.username;
+    
+    if (!room) {
+      return res.status(400).json({ success: false, error: "Falta el parámetro 'room'." });
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -518,6 +629,79 @@ async function startServer() {
         success: false,
         error: "LiveKit SDK no disponible o error al generar el token."
       });
+    }
+  });
+
+  // --- IN-MEMORY TUTOR AI COST CONTROL (Protected: Authenticated users only) ---
+  const DAILY_MSG_LIMIT_PER_USER = 30; // Max 30 questions per student/day
+  const userDailyUsage = new Map<string, { count: number; lastReset: string }>();
+
+  app.post('/api/tutor-ia/chat', rateLimit(15, 60000), authenticateUser, async (req, res) => {
+    try {
+      const { message, history, subject } = req.body || {};
+      const user = (req as any).user;
+      const uid = user?.uid || 'anonymous_user';
+
+      if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        return res.status(400).json({ error: 'El mensaje es obligatorio' });
+      }
+
+      // 1. Cost Control: Daily usage quota check derived from verified user UID
+      const today = new Date().toISOString().split('T')[0];
+      const usage = userDailyUsage.get(uid) || { count: 0, lastReset: today };
+
+      if (usage.lastReset !== today) {
+        usage.count = 0;
+        usage.lastReset = today;
+      }
+
+      if (usage.count >= DAILY_MSG_LIMIT_PER_USER) {
+        return res.status(429).json({
+          error: `Has alcanzado el límite diario de ${DAILY_MSG_LIMIT_PER_USER} consultas al Tutor IA para controlar el uso de la plataforma. Inténtalo de nuevo mañana.`
+        });
+      }
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ error: 'Servicio de IA no disponible en este momento.' });
+      }
+
+      // 2. Cost Control: Truncate history to last 6 messages to cap input token cost
+      const truncatedHistory = Array.isArray(history) ? history.slice(-6) : [];
+
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+
+      // 3. Cost Control: Efficient Model Selection & Token Capping
+      const systemInstruction = `Eres un Tutor Pedagógico de Inteligencia Artificial para la plataforma educativa "AulaInfinity". Materia actual: ${subject || 'General'}. Tu objetivo es guiar al estudiante paso a paso de forma clara, motivadora y concisa. Responde en español usando formato Markdown claro. Limita tus respuestas a un máximo de 250-300 palabras para facilitar la lectura.`;
+
+      const formattedContents = [
+        ...truncatedHistory.map((h: any) => ({
+          role: h.sender === 'user' || h.role === 'user' ? 'user' : 'model',
+          parts: [{ text: h.text || '' }]
+        })),
+        { role: 'user', parts: [{ text: message }] }
+      ];
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash', // Efficient cost-optimized flash model
+        contents: formattedContents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 800, // Cost Control: Cap output length to prevent runaway token costs
+          temperature: 0.6
+        }
+      });
+
+      // Increment user usage counter upon successful generation
+      usage.count += 1;
+      userDailyUsage.set(uid, usage);
+
+      const replyText = response.text || 'No se pudo generar una respuesta. Por favor, reintenta.';
+      return res.json({ reply: replyText, remainingQuota: DAILY_MSG_LIMIT_PER_USER - usage.count });
+    } catch (error: any) {
+      console.error('Error en Tutor IA API:', error);
+      return res.status(503).json({ error: 'Servicio temporalmente no disponible. Por favor, reintenta en unos momentos.' });
     }
   });
 

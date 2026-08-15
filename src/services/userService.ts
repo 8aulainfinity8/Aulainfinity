@@ -2,6 +2,7 @@ import { doc, setDoc, getDoc, getDocs, collection, query, where, serverTimestamp
 import { db } from './firebase';
 import type { AnyUser } from '../types';
 import { isAdminEmail } from '../constants/auth';
+import { UserSchema } from '../schemas';
 
 export interface UserFirestoreData {
     uid: string;
@@ -22,7 +23,7 @@ export interface UserFirestoreData {
 }
 
 export async function getUserProfile(uid: string): Promise<UserFirestoreData | null> {
-    const userDocRef = doc(db, 'users', uid);
+    const userDocRef = doc(db, 'firestore_users', uid);
     const userDoc = await getDoc(userDocRef);
     if (userDoc.exists()) {
         return userDoc.data() as UserFirestoreData;
@@ -70,20 +71,20 @@ export async function initializeAndSyncUserDataInFirestore(
         if (!targetDocId) return null;
 
         let existingData: any = {};
-        let userDocRef = doc(db, 'users', targetDocId);
+        let userDocRef = doc(db, 'firestore_users', targetDocId);
         let existingDoc = await getDoc(userDocRef);
 
         // If not found by direct docId, query Firestore by email to locate existing document
         if (!existingDoc.exists()) {
             if (user.email) {
-                const usersRef = collection(db, 'users');
+                const usersRef = collection(db, 'firestore_users');
                 const qEmail = query(usersRef, where('email', '==', user.email));
                 const snapEmail = await getDocs(qEmail);
                 if (!snapEmail.empty) {
                     const foundDoc = snapEmail.docs[0];
                     targetDocId = foundDoc.id;
                     existingData = foundDoc.data();
-                    userDocRef = doc(db, 'users', targetDocId);
+                    userDocRef = doc(db, 'firestore_users', targetDocId);
                 }
             }
         } else {
@@ -119,9 +120,10 @@ export async function initializeAndSyncUserDataInFirestore(
             ...((user as any).phone ? { phone: (user as any).phone } : {}),
         };
 
-        const userData = cleanFirestoreData(rawUserData);
+        // Validate and clean using Zod for strict runtime safety without breaking old docs
+        const userData = UserSchema.parse(cleanFirestoreData(rawUserData)) as UserFirestoreData;
 
-        // Save into main users/{uid} document and role-specific sub-collection in parallel
+        // Save into main firestore_users/{uid} document and role-specific sub-collection in parallel
         console.log(`[UserService] Writing user doc & role doc in parallel for 'users/${targetDocId}'...`);
         const writePromises: Promise<any>[] = [setDoc(userDocRef, userData, { merge: true })];
         if (role === 'student') {

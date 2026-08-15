@@ -8,6 +8,7 @@ import { AuthContext } from '../contexts/AuthContext';
 import { AppConfigContext } from '../contexts/AppConfigContext';
 // FIX: Corrected import paths.
 import * as api from '../services/api';
+import { auth } from '../services/firebase';
 import type { ChatMessage, StudentUser, CourseLevel } from '../types';
 import {
     ChevronLeftIcon,
@@ -259,19 +260,41 @@ export const TutorIAPage: React.FC = () => {
 
         try {
             let accumulatedText = '';
-            const stream = api.getTutorResponse(historyForApi, imagePayload, activeVibe);
-            for await (const chunk of stream) {
-                if (streamController.current.abort) break;
-                accumulatedText += chunk;
-                setMessages(prev => {
-                    const newMessages = [...prev];
-                    const lastMessage = newMessages[newMessages.length - 1];
-                    if (lastMessage?.role === 'model') {
-                        lastMessage.text += chunk;
-                    }
-                    return newMessages;
-                });
+            
+            // 1. Tutor IA Cost Control & Rate Limiting Backend Call
+            const idToken = auth?.currentUser ? await auth.currentUser.getIdToken().catch(() => null) : null;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (idToken) {
+                headers['Authorization'] = `Bearer ${idToken}`;
             }
+
+            const res = await fetch('/api/tutor-ia/chat', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    userId: user?.id || auth?.currentUser?.uid || 'guest',
+                    message: currentInput,
+                    history: historyForApi,
+                    subject: activeVibe || 'General'
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || `Error del servidor (${res.status})`);
+            }
+
+            const data = await res.json();
+            accumulatedText = data.reply || 'Lo siento, no he podido generar una respuesta.';
+
+            setMessages(prev => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage?.role === 'model') {
+                    lastMessage.text = accumulatedText;
+                }
+                return newMessages;
+            });
 
             // Once streaming ends successfully, log the query in the background
             if (user && accumulatedText) {

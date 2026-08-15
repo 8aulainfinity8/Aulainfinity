@@ -23,7 +23,7 @@ const ai = new GoogleGenAI({ apiKey: functions.config().gemini.key });
 const systemInstruction = "Si generas contenido que involucre dinero, debes usar Euros (€) como la moneda. Para cualquier notación matemática, no uses LaTeX delimitado (como $...$ o \\(...\\)). En su lugar, usa caracteres Unicode (por ejemplo, x², √2, ≠) o MathML cuando sea apropiado para fórmulas complejas.";
 
 // Función para sincronizar rol de usuario con Custom Claims
-export const syncUserRole = functions.region("europe-west1").firestore.document("users/{userId}").onWrite(async (change, context) => {
+export const syncUserRole = functions.region("europe-west1").firestore.document("firestore_users/{userId}").onWrite(async (change, context) => {
   const userId = context.params.userId;
   const newData = change.after.exists ? change.after.data() : null;
   const oldData = change.before.exists ? change.before.data() : null;

@@ -2,26 +2,102 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Permitir lectura a todos los usuarios para reproducir vídeos de cursos, clases y recursos
-    match /videos/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
     
-    match /recordings/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    // Funciones auxiliares de autenticación y roles
+    function isSignedIn() {
+      return request.auth != null;
     }
-    
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.role == 'admin') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == '8aulainfinity8@gmail.com')
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && (
+        (request.auth.token.role == 'teacher') ||
+        isAdmin()
+      );
+    }
+
+    // Validación de tamaño máximo de archivo (en MB)
+    function maxFileSize(maxSizeMB) {
+      return request.resource.size < maxSizeMB * 1024 * 1024;
+    }
+
+    // 1. Fotos de Perfil (Avatares)
+    // Lectura pública/autenticada para mostrar avatares en chats y comentarios.
+    // Escritura restringida estrictamente al usuario dueño del perfil (máx 5MB).
+    match /avatars/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() 
+                   && (fileName.matches('^' + request.auth.uid + '_.*') || fileName == request.auth.uid)
+                   && maxFileSize(5);
+    }
+
+    // 2. Archivos y Carpetas Personales de Usuario (/users/{userId}/...)
+    // Acceso y edición exclusivos del usuario propietario o administradores.
     match /users/{userId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId) || isTeacher();
+      allow write: if (isOwner(userId) || isAdmin()) && maxFileSize(25);
     }
-    
-    // Fallback general para cualquier otro archivo en Storage
+
+    // 3. Apuntes y Documentos Privados del Estudiante (/notes/{userId}/...)
+    // Aislamiento completo por ID de estudiante (máx 15MB).
+    match /notes/{userId}/{fileName} {
+      allow read: if isOwner(userId) || isTeacher();
+      allow write: if (isOwner(userId) || isAdmin()) && maxFileSize(15);
+    }
+
+    // 4. Adjuntos de Chat y Tutorías (/chat_attachments/{conversationId}/...)
+    // Lectura y subida de archivos para usuarios autenticados (máx 20MB).
+    match /chat_attachments/{conversationId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && maxFileSize(20);
+    }
+
+    // 5. Materiales Educativos de Cursos (/course_materials/{courseId}/...)
+    // Lectura para estudiantes y carga restringida a docentes/administradores (máx 50MB).
+    match /course_materials/{courseId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher() && maxFileSize(50);
+    }
+
+    // 6. Vídeos de Cursos y Grabaciones de Clases (/videos/ y /recordings/)
+    // Lectura para usuarios autenticados; subida restringida a docentes y admins.
+    match /videos/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher() && maxFileSize(500);
+    }
+
+    match /recordings/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher() && maxFileSize(500);
+    }
+
+    // 7. Comprobantes de Pago y Justificantes (/receipts/{fileName})
+    // Lectura restringida al propio usuario y administradores.
+    match /receipts/{fileName} {
+      allow read: if isAdmin() || (isSignedIn() && fileName.matches('^' + request.auth.uid + '_.*'));
+      allow write: if isSignedIn() && (fileName.matches('^' + request.auth.uid + '_.*') || isAdmin()) && maxFileSize(10);
+    }
+
+    // 8. Adjuntos Generales (/attachments/{fileName})
+    match /attachments/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && maxFileSize(25);
+    }
+
+    // Bloqueo por defecto para cualquier otra ruta no especificada
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }

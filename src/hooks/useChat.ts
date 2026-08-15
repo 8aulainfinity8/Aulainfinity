@@ -7,6 +7,7 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
+  limitToLast,
   serverTimestamp, 
   increment,
   setDoc,
@@ -98,10 +99,11 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
       }
     );
 
-    // Subcolección de mensajes ordenada cronológicamente
+    // Subcolección de mensajes ordenada cronológicamente (limitada a los últimos 100 para escalabilidad y ahorro de lecturas)
     const messagesQuery = query(
       collection(db, 'chats', chatId, 'messages'),
-      orderBy('timestamp', 'asc')
+      orderBy('timestamp', 'asc'),
+      limitToLast(100)
     );
 
     const unsubMessages = onSnapshot(

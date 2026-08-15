@@ -280,7 +280,7 @@ export const ChatPage: React.FC = () => {
                 
                 
                 {showWhiteboard && conversationId && (
-                    <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex flex-col p-0 sm:p-4 animate-fade-in w-full h-full">
+                    <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex flex-col p-0 sm:p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] animate-fade-in w-full h-full">
                         <div className="flex-1 bg-white dark:bg-slate-900 rounded-none sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col border border-slate-800 w-full h-full">
                             <Whiteboard
                                 courseId={conversationId}

@@ -269,6 +269,7 @@ const VideoPlayer: React.FC<{ youtubeId?: string, videoUrl?: string, videoTitle:
                 height="100%"
                 src={embedUrl}
                 title={videoTitle}
+                loading="lazy"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen

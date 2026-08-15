@@ -2359,37 +2359,36 @@ export const dbCloseSupportConversation = (conversationId: string, studentId: st
 };
 
 export const dbAssignConversation = (conversationId: string, teacherId: string | null): Conversation => {
-    const convo = conversationsData.find(c => c.id === conversationId);
-    if (!convo) {
-        throw new Error('Conversación no encontrada');
-    }
-    if (teacherId) {
-        const teacher = teachersData.find(t => t.id === teacherId);
-        if (teacher) {
-            convo.teacherId = teacher.id;
-            convo.teacherName = teacher.name;
-        }
-    } else {
-        convo.teacherId = undefined;
-        convo.teacherName = undefined;
-    }
     const studentId = conversationId.replace('direct_', '');
-    const student = usersData.find(u => u.id === studentId || u.id === conversationId || u.id === convo.studentId);
+    const teacher = teacherId ? (teachersData.find(t => t.id === teacherId) || usersData.find(u => u.id === teacherId)) : null;
+
+    const targetConvos = conversationsData.filter(c => 
+        c.id === conversationId || 
+        c.id === studentId || 
+        c.id === `direct_${studentId}` || 
+        c.studentId === studentId
+    );
+
+    if (targetConvos.length > 0) {
+        targetConvos.forEach(c => {
+            c.teacherId = teacher ? teacher.id : (null as any);
+            c.teacherName = teacher ? teacher.name : (null as any);
+        });
+    }
+
+    const student = usersData.find(u => u.id === studentId || u.id === conversationId || targetConvos.some(tc => tc.studentId === u.id));
     if (student) {
-        if (teacherId) {
-            const teacher = teachersData.find(t => t.id === teacherId);
-            if (teacher) {
-                student.assignedTeacherId = teacher.id;
-                student.assignedTeacherName = teacher.name;
-            }
+        if (teacher) {
+            student.assignedTeacherId = teacher.id;
+            student.assignedTeacherName = teacher.name;
         } else {
             student.assignedTeacherId = null as any;
             student.assignedTeacherName = null as any;
         }
         eventEmitter.emit('user-update', student);
     }
-    eventEmitter.emit('message-update', {} as any); // trigger updates
-    return convo;
+    eventEmitter.emit('message-update', {} as any);
+    return targetConvos[0] || conversationsData.find(c => c.id === conversationId)!;
 };
 
 export const dbAssignStudentTeacher = (studentId: string, teacherId: string | null): StudentUser => {
@@ -2403,33 +2402,25 @@ export const dbAssignStudentTeacher = (studentId: string, teacherId: string | nu
         (u.email && student.email && u.email.toLowerCase() === student.email.toLowerCase())
     );
 
-    if (teacherId) {
-        const teacher = teachersData.find(t => t.id === teacherId);
-        if (teacher) {
-            matchingStudents.forEach(s => {
-                s.assignedTeacherId = teacher.id;
-                s.assignedTeacherName = teacher.name;
-            });
+    const teacher = teacherId ? (teachersData.find(t => t.id === teacherId) || usersData.find(u => u.id === teacherId)) : null;
 
-            // Also check if there's any conversation for this student and assign it to the teacher
-            const convo = conversationsData.find(c => c.id === studentId || c.studentId === studentId || (student.email && c.id?.includes(student.email)));
-            if (convo) {
-                convo.teacherId = teacher.id;
-                convo.teacherName = teacher.name;
-            }
-        }
-    } else {
-        matchingStudents.forEach(s => {
-            s.assignedTeacherId = null as any;
-            s.assignedTeacherName = null as any;
-        });
+    matchingStudents.forEach(s => {
+        s.assignedTeacherId = teacher ? teacher.id : (null as any);
+        s.assignedTeacherName = teacher ? teacher.name : (null as any);
+    });
 
-        const convo = conversationsData.find(c => c.id === studentId || c.studentId === studentId || (student.email && c.id?.includes(student.email)));
-        if (convo) {
-            convo.teacherId = null as any;
-            convo.teacherName = null as any;
-        }
-    }
+    const matchingConvos = conversationsData.filter(c => 
+        c.id === studentId || 
+        c.id === `direct_${studentId}` || 
+        c.studentId === student.id || 
+        (student.email && c.id?.includes(student.email))
+    );
+
+    matchingConvos.forEach(convo => {
+        convo.teacherId = teacher ? teacher.id : (null as any);
+        convo.teacherName = teacher ? teacher.name : (null as any);
+    });
+
     eventEmitter.emit('user-update', student);
     eventEmitter.emit('message-update', {} as any);
     return student;

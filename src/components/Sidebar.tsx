@@ -13,7 +13,7 @@ import { Users, Flame, Library } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
 import { useI18n } from '../hooks/useI18n';
 import { useStudyStreak } from '../hooks/useStudyStreak';
-import { useRole } from '../hooks/useRole';
+import { useAuthorization } from '../hooks/useAuthorization';
 import { ThemeContext } from '../contexts/ThemeContext';
 import AulaLogoClean from '../assets/images/aula_logo_clean_white_bg_1779378431610.png';
 import AulaLogoCleanNoBg from '../assets/images/aula_logo_clean_1779377396984.png';
@@ -108,7 +108,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ sidebarState, onItemClick }) => {
     const { logout } = useContext(AuthContext);
-    const { user, isTeacher, isStudent, isAdmin, studentUser, teacherUser } = useRole();
+    const { user, isTeacher, isStudent, isAdmin, studentUser, teacherUser } = useAuthorization();
     const { theme } = useContext(ThemeContext);
     const { appConfig } = useContext(AppConfigContext);
     const { unreadConversationsCount, pendingTutoringRequestsCount, pendingTopicRequestsCount } = useContext(AdminNotificationContext);

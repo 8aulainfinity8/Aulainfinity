@@ -38,7 +38,7 @@ import {
     ArrowUpRight,
     Target
 } from 'lucide-react';
-import { db, storage } from '../services/firebase';
+import { db, storage, auth } from '../services/firebase';
 import {
     doc,
     setDoc,
@@ -863,12 +863,13 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
         let reconnectTimeout: any = null;
         let isDisposed = false;
 
-        const connect = () => {
+        const connect = async () => {
             if (isDisposed) return;
 
             try {
+                const token = auth.currentUser ? await auth.currentUser.getIdToken() : "";
                 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${wsProtocol}//${window.location.host}`;
+                const wsUrl = `${wsProtocol}//${window.location.host}?token=${token}`;
                 socket = new WebSocket(wsUrl);
 
                 socket.onopen = () => {
@@ -1299,11 +1300,13 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
 
     // 3. Setup and close functions for teacher controls
     const handleRequestCloseBoard = () => {
-        if (!isTeacher) {
-            if (onClose) onClose();
+        if (onClose) {
+            onClose();
             return;
         }
-        setConfirmCloseBoardModalOpen(true);
+        if (isTeacher) {
+            setConfirmCloseBoardModalOpen(true);
+        }
     };
 
     const handleConfirmCloseAndClearBoard = async () => {
@@ -2854,8 +2857,8 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
                 </div>
             )}
             {/* Header Panel */}
-            <div className={`bg-slate-50 dark:bg-slate-750 border-b dark:border-slate-700 flex items-center justify-between gap-2 flex-shrink-0 z-20 transition-all ${isVisualFullScreen ? 'px-2 py-1.5 md:px-4 md:py-3' : 'px-4 py-3'}`}>
-                <div className="flex items-center gap-2 flex-shrink-0">
+            <div className={`bg-slate-50 dark:bg-slate-750 border-b dark:border-slate-700 flex items-center justify-between gap-1.5 sm:gap-2 flex-shrink-0 z-20 transition-all ${isVisualFullScreen ? 'px-2 py-1.5 md:px-4 md:py-2.5' : 'px-2.5 sm:px-4 py-2 sm:py-2.5'}`}>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 min-w-0">
                     {isPresentationMode ? (
                         <div className="p-1 px-2.5 rounded bg-indigo-600 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm flex-shrink-0 animate-pulse">
                             <Eye className="w-3.5 h-3.5" />
@@ -2863,18 +2866,18 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
                         </div>
                     ) : (
                         <>
-                            <div className="p-1 px-2.5 rounded bg-indigo-500 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm flex-shrink-0">
+                            <div className="p-1 px-2 rounded sm:px-2.5 bg-indigo-500 text-white font-black text-[10px] sm:text-xs uppercase tracking-wider flex items-center gap-1 shadow-sm flex-shrink-0">
                                 <Activity className="w-3.5 h-3.5 animate-pulse" />
                                 <span className="hidden sm:inline">Pizarra Digital Grupal</span>
                                 <span className="inline sm:hidden">Pizarra</span>
                             </div>
                             {isActive && (
-                                <span className="text-[10px] text-green-500 font-bold uppercase animate-pulse flex items-center gap-1 flex-shrink-0">
+                                <span className="text-[10px] text-green-500 font-bold uppercase animate-pulse flex items-center gap-1 flex-shrink-0 hidden xs:inline-flex">
                                     ● Emitiendo
                                 </span>
                             )}
                             {isActive && (
-                                <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs border flex-shrink-0 ${
+                                <span className={`text-[9px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs border flex-shrink-0 ${
                                     isWsConnected 
                                     ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-950/30 border-emerald-200/50 dark:border-emerald-800/20' 
                                     : 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30 border-amber-200/50 dark:border-amber-800/20'
@@ -2888,7 +2891,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
 
                 {/* Size toggle controls */}
                 {isActive && !isVisualFullScreen && !isPresentationMode && (
-                    <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs flex-shrink-0">
+                    <div className="hidden lg:flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs flex-shrink-0">
                         <button
                             type="button"
                             onClick={() => setBoardSize('compact')}
@@ -2929,7 +2932,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
                 )}
             
                 {/* Switch toggler exclusively for Teachers */}
-                <div className="flex items-center gap-1.5 overflow-x-auto max-w-[65%] sm:max-w-[80%] flex-nowrap py-0.5 scrollbar-none flex-shrink-0">
+                <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 flex-1 justify-end py-0.5 scrollbar-none pr-1">
                     <button
                         onClick={() => {
                             if (!isPresentationMode) {
@@ -3102,22 +3105,39 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
                     )}
                 </div>
 
-                {/* Fixed Close Button on Far Right - Always Visible */}
+                {/* Fixed Close Button on Far Right - Always Pinned & Touch Accessible */}
                 {onClose && (
-                    <button
-                        type="button"
-                        onClick={handleRequestCloseBoard}
-                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-md border border-rose-500 active:scale-95 flex-shrink-0 z-30"
-                        title="Cerrar Pizarra"
-                    >
-                        <X className="w-4 h-4" />
-                        <span className="hidden xs:inline">Cerrar</span>
-                    </button>
+                    <div className="flex-shrink-0 z-30 sticky right-0 bg-slate-50 dark:bg-slate-750 pl-1.5 flex items-center">
+                        <button
+                            type="button"
+                            onClick={handleRequestCloseBoard}
+                            className="px-3 py-2 sm:px-3.5 sm:py-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md border border-rose-500 active:scale-95 flex-shrink-0 min-h-[40px] min-w-[40px] justify-center"
+                            title="Cerrar Pizarra"
+                            aria-label="Cerrar Pizarra"
+                        >
+                            <X className="w-4 h-4 stroke-[2.5]" />
+                            <span className="font-extrabold text-xs">Cerrar</span>
+                        </button>
+                    </div>
                 )}
             </div>
 
             {/* Conditional Board State - Inactive vs Active */}
             <div className="flex-1 w-full h-full relative">
+                {/* Floating Close Button overlay for Presentation Mode */}
+                {onClose && isPresentationMode && (
+                    <div className="absolute top-3 right-3 z-[100]">
+                        <button
+                            type="button"
+                            onClick={handleRequestCloseBoard}
+                            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-2xl border border-rose-400 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                            title="Cerrar Pizarra"
+                        >
+                            <X className="w-4 h-4 stroke-[2.5]" />
+                            <span>Cerrar</span>
+                        </button>
+                    </div>
+                )}
                 { !isActive ? (
                     <div id="inactive-screen" className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 text-slate-500 p-6 text-center">
                         <PenTool className="w-16 h-16 mb-4 text-indigo-500 opacity-60 animate-bounce" />

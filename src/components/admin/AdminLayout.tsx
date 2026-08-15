@@ -3,7 +3,7 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { AdminSidebar } from './AdminSidebar';
 import { Header } from '../Header';
 import { ROUTES } from '../../constants/routes';
-import { useRole } from '../../hooks/useRole';
+import { useAuthorization } from '../../hooks/useAuthorization';
 import { ShieldAlert } from 'lucide-react';
 import { 
     DashboardIcon, 
@@ -18,7 +18,7 @@ import { useI18n } from '../../hooks/useI18n';
 
 const AdminBottomDock: React.FC<{ onItemClick: () => void }> = ({ onItemClick }) => {
     const location = useLocation();
-    const { isTeacher } = useRole();
+    const { isTeacher } = useAuthorization();
     const { t } = useI18n();
     const { newUsersCount, newSubscriptionsCount, unreadConversationsCount } = useContext(AdminNotificationContext);
     const [isDimmed, setIsDimmed] = useState(false);
@@ -178,7 +178,7 @@ const RestrictedAccessMessage: React.FC = () => {
 };
 
 export const AdminLayout: React.FC = () => {
-    const { user, isTeacher, hasTeacherAccess } = useRole();
+    const { user, isTeacher, hasTeacherAccess } = useAuthorization();
     const location = useLocation();
     const [sidebarState, setSidebarState] = useState<'open' | 'collapsed' | 'closed'>(() => {
         try {

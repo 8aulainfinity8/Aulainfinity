@@ -6,7 +6,7 @@ import type { Conversation, StudentPeerConversation } from '../types';
 import { DashboardIcon, CalendarIcon, SparklesIcon, MenuIcon, ChartBarIcon, UsersIcon, UserIcon, ChatBubbleLeftRightIcon } from './icons';
 import { ROUTES } from '../constants/routes';
 import { AuthContext } from '../contexts/AuthContext';
-import { useRole } from '../hooks/useRole';
+import { useAuthorization } from '../hooks/useAuthorization';
 import { AdminNotificationContext } from '../contexts/AdminNotificationContext';
 import { AppConfigContext } from '../contexts/AppConfigContext';
 import { useI18n } from '../hooks/useI18n';
@@ -81,7 +81,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({ onM
         resetTimer();
     };
 
-    const { user, isTeacher, isAdmin } = useRole();
+    const { user, isTeacher, isAdmin } = useAuthorization();
     const { t } = useI18n();
     const { appConfig } = useContext(AppConfigContext);
     const { unreadConversationsCount = 0, pendingTutoringRequestsCount = 0, pendingTopicRequestsCount = 0 } = useContext(AdminNotificationContext) || {};

@@ -2,7 +2,7 @@ import { useContext, useMemo } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { AnyUser, StudentUser, TeacherUser, AdminUser } from '../types';
 
-export interface UseRoleReturn {
+export interface UseAuthorizationReturn {
   user: AnyUser | null;
   role: 'student' | 'teacher' | 'admin' | null;
   isAdmin: boolean;
@@ -11,6 +11,7 @@ export interface UseRoleReturn {
   isApprovedTeacher: boolean;
   hasAdminAccess: boolean;
   hasTeacherAccess: boolean;
+  canInitiateWhiteboard: boolean;
   studentUser: StudentUser | null;
   teacherUser: TeacherUser | null;
   adminUser: AdminUser | null;
@@ -20,7 +21,7 @@ export interface UseRoleReturn {
  * Custom hook to manage user roles and authorization.
  * Centralizes RBAC (Role-Based Access Control) logic throughout AulaInfinity.
  */
-export const useRole = (): UseRoleReturn => {
+export const useAuthorization = (): UseAuthorizationReturn => {
   const { user } = useContext(AuthContext);
 
   const role = useMemo(() => {
@@ -55,6 +56,10 @@ export const useRole = (): UseRoleReturn => {
     return isTeacher || isAdmin;
   }, [isTeacher, isAdmin]);
 
+  const canInitiateWhiteboard = useMemo(() => {
+    return hasTeacherAccess; // Only teachers or admins can initiate whiteboard by default
+  }, [hasTeacherAccess]);
+
   const studentUser = useMemo(() => {
     return isStudent ? (user as StudentUser) : null;
   }, [isStudent, user]);
@@ -76,6 +81,7 @@ export const useRole = (): UseRoleReturn => {
     isApprovedTeacher,
     hasAdminAccess,
     hasTeacherAccess,
+    canInitiateWhiteboard,
     studentUser,
     teacherUser,
     adminUser,

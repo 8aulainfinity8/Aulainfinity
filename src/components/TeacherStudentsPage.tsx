@@ -51,7 +51,7 @@ export const TeacherStudentsPage: React.FC = () => {
   const isAdmin = user?.role === 'admin';
   const isTeacher = user?.role === 'teacher';
   const hasAccess = isTeacher || isAdmin;
-  const isApprovedTeacher = isTeacher ? (user as any).isApprovedForTutoring === true : true;
+  const isApprovedTeacher = isTeacher ? (user as any).isApprovedForTutoring !== false : true;
   const isPermittedToInteract = isAdmin || isApprovedTeacher;
   const teacherId = user?.id || '';
 

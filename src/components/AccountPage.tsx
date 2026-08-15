@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { AuthContext } from '../contexts/AuthContext';
-import { useRole } from '../hooks/useRole';
+import { useAuthorization } from '../hooks/useAuthorization';
 import { NotificationContext } from '../contexts/NotificationContext';
 import * as api from '../services/api';
 import { ChevronLeftIcon, LogoutIcon } from './icons';
@@ -27,7 +27,7 @@ interface IPasswordFormInput {
 export const AccountPage: React.FC = () => {
     const { t } = useI18n();
     const { updateUser, logout } = useContext(AuthContext);
-    const { user, studentUser, teacherUser, isStudent, isTeacher, isAdmin } = useRole();
+    const { user, studentUser, teacherUser, isStudent, isTeacher, isAdmin } = useAuthorization();
     const { addToast } = useContext(NotificationContext);
     const navigate = useNavigate();
     const handleBack = useBackNavigation();

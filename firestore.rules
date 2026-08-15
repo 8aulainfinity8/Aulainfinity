@@ -13,20 +13,14 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token != null && "role" in request.auth.token && request.auth.token.role == 'admin') ||
-        (request.auth.token != null && "email" in request.auth.token && request.auth.token.email.lower() == '8aulainfinity8@gmail.com') ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        (request.auth.token.role == 'admin') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == '8aulainfinity8@gmail.com')
       );
     }
 
     function isTeacher() {
       return isSignedIn() && (
-        (request.auth.token != null && "role" in request.auth.token && request.auth.token.role == 'teacher') ||
-        exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') ||
+        (request.auth.token.role == 'teacher') ||
         isAdmin()
       );
     }
@@ -96,133 +90,212 @@ service cloud.firestore {
 
     match /students/{studentId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isOwner(studentId) || isTeacher());
+      allow create: if isSignedIn() && (isOwner(studentId) || isTeacher());
+      allow update: if isSignedIn() && (isOwner(studentId) || isTeacher());
+      allow delete: if isAdmin();
     }
 
     match /teachers/{teacherId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isOwner(teacherId) || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isSignedIn() && (isAdmin() || isOwner(teacherId));
+      allow delete: if isAdmin();
     }
 
     match /admins/{adminId} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Progress Log
     match /student_course_progress/{progressId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
+      allow create: if isSignedIn() && (isOwner(request.resource.data.studentId) || isTeacher());
+      allow update: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
+      allow delete: if isAdmin();
     }
 
     // Tutoring Requests
     match /firestore_tutoring_requests/{requestId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || isOwner(resource.data.studentId) || isTeacher());
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
+      allow delete: if isSignedIn() && (isOwner(resource.data.studentId) || isAdmin());
     }
 
     // Direct Messages & Group Messages
     match /firestore_direct_messages/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
     
     match /firestore_peer_messages/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /firestore_teacher_messages/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /firestore_course_messages/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /firestore_course_group_messages/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /firestore_conversations/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     match /firestore_closed_conversations/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     match /firestore_peer_conversations/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     // Chats & Voice Calling (Protected for authenticated users)
     match /chats/{chatId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
       }
     }
 
     match /rooms/{roomId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
       }
     }
 
     match /calls/{callId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
       }
     }
 
     match /voice_group_calls/{callId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
       }
     }
 
     match /voiceRooms/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
       }
     }
 
     // Diagnostic connection test collection
     match /test/{id} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isAdmin();
     }
 
     // Whiteboard Cursors
     match /whiteboardCursors/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     // Whiteboard & Meta
     match /whiteboards/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
       }
     }
 
     match /whiteboardMeta/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /whiteboardDocs/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    match /whiteboardStrokes/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
     }
 
     // Homework agenda
     match /firestore_agenda_events/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || isOwner(resource.data.studentId) || isTeacher());
+      allow create: if isSignedIn() && (request.resource.data.studentId == request.auth.uid || isTeacher());
+      allow update: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
+      allow delete: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
     }
 
     // Video lesson comments
     match /firestore_comments/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Student topic proposals
     match /firestore_topic_requests/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isTeacher();
+      allow delete: if isAdmin();
     }
 
     // Quizzes & Answers
@@ -232,18 +305,21 @@ service cloud.firestore {
     }
 
     match /firestore_student_answers/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || isOwner(resource.data.studentId) || isTeacher());
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isSignedIn() && (isOwner(resource.data.studentId) || isTeacher());
+      allow delete: if isAdmin();
     }
 
-    // Coins, finance and billing
+    // Coins, finance and billing (Protected against direct client tamper)
     match /infinity_transactions/{id} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.studentId == request.auth.uid));
+      allow write: if isAdmin();
     }
 
     match /firestore_infinity_transactions/{id} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.studentId == request.auth.uid));
+      allow write: if isAdmin();
     }
 
     match /student_payments/{id} {
@@ -257,12 +333,12 @@ service cloud.firestore {
     }
 
     match /student_expenses/{id} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && resource != null && resource.data.studentId == request.auth.uid);
       allow write: if isAdmin();
     }
 
     match /firestore_student_expenses/{id} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (isSignedIn() && resource != null && resource.data.studentId == request.auth.uid);
       allow write: if isAdmin();
     }
 
@@ -278,31 +354,40 @@ service cloud.firestore {
 
     // Friend list
     match /student_friends/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (resource == null || resource.data.studentId == request.auth.uid || resource.data.friendId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && (request.resource.data.studentId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.friendId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.studentId == request.auth.uid || isAdmin());
     }
 
     // AI Chat History logs
     match /ai_query_logs/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // Deleted items list
     match /firestore_deleted_items/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
     }
 
     // Notification states
     match /firestore_user_seen_states/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (isOwner(id) || isAdmin());
+      allow write: if isSignedIn() && (isOwner(id) || isAdmin());
     }
 
     // Whatsapp triggers
     match /whatsapp_queue/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /whatsapp_logs/{id} {
-      allow read, write: if isSignedIn();
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
   }
 }

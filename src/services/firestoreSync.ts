@@ -787,92 +787,95 @@ export const initFirestoreSync = () => {
             });
         }, (err) => handleSyncError('Firestore courses sync:', err));
 
-        // 12. Users sync (users collection)
+        // 12. Users sync (users & firestore_users collection)
+        const handleUserChange = (change: any) => {
+            const data = change.doc.data() || {};
+            const userId = data.id || data.uid || change.doc.id;
+            if (change.type === 'added' || change.type === 'modified') {
+                if ((dbMock as any).restoreUserFromDeleted) {
+                    (dbMock as any).restoreUserFromDeleted(userId, data.email);
+                    const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
+                    deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
+                    if (data.email) {
+                        const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
+                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
+                    }
+                }
+                const roleLower = (data.role || '').toLowerCase();
+                const matchFn = (u: any) => u && (u.id === userId || u.uid === userId || u.firebaseUid === userId || (u.email && data.email && u.email.toLowerCase() === data.email.toLowerCase()));
+
+                if (roleLower === 'teacher') {
+                    const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'teacher', ...data } as any) || ({ id: userId, role: 'teacher', ...data } as any);
+                    const idx = (dbMock.teachersData || []).findIndex(matchFn);
+                    if (idx === -1) {
+                        dbMock.teachersData.push(normalizedData);
+                    } else {
+                        dbMock.teachersData[idx] = dbMock.normalizeAnyUser({ ...dbMock.teachersData[idx], ...normalizedData } as any) || normalizedData;
+                    }
+                    if (dbMock.studentsData) {
+                        let sIdx;
+                        while ((sIdx = dbMock.studentsData.findIndex(matchFn)) !== -1) dbMock.studentsData.splice(sIdx, 1);
+                    }
+                    if (dbMock.adminsData) {
+                        let aIdx;
+                        while ((aIdx = dbMock.adminsData.findIndex(matchFn)) !== -1) dbMock.adminsData.splice(aIdx, 1);
+                    }
+                    eventEmitter.emit('user-updated', userId);
+                    eventEmitter.emit('user-update', normalizedData);
+                } else if (roleLower === 'admin') {
+                    const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'admin', ...data } as any) || ({ id: userId, role: 'admin', ...data } as any);
+                    const idx = (dbMock.adminsData || []).findIndex(matchFn);
+                    if (idx === -1) {
+                        dbMock.adminsData.push(normalizedData);
+                    } else {
+                        dbMock.adminsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.adminsData[idx], ...normalizedData } as any) || normalizedData;
+                    }
+                    if (dbMock.studentsData) {
+                        let sIdx;
+                        while ((sIdx = dbMock.studentsData.findIndex(matchFn)) !== -1) dbMock.studentsData.splice(sIdx, 1);
+                    }
+                    if (dbMock.teachersData) {
+                        let tIdx;
+                        while ((tIdx = dbMock.teachersData.findIndex(matchFn)) !== -1) dbMock.teachersData.splice(tIdx, 1);
+                    }
+                    eventEmitter.emit('user-updated', userId);
+                    eventEmitter.emit('user-update', normalizedData);
+                } else {
+                    const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'student', ...data } as any) || ({ id: userId, role: 'student', ...data } as any);
+                    const idx = (dbMock.studentsData || []).findIndex(matchFn);
+                    if (idx === -1) {
+                        dbMock.studentsData.push(normalizedData);
+                    } else {
+                        dbMock.studentsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.studentsData[idx], ...normalizedData } as any) || normalizedData;
+                    }
+                    if (dbMock.teachersData) {
+                        let tIdx;
+                        while ((tIdx = dbMock.teachersData.findIndex(matchFn)) !== -1) dbMock.teachersData.splice(tIdx, 1);
+                    }
+                    if (dbMock.adminsData) {
+                        let aIdx;
+                        while ((aIdx = dbMock.adminsData.findIndex(matchFn)) !== -1) dbMock.adminsData.splice(aIdx, 1);
+                    }
+                    eventEmitter.emit('user-updated', userId);
+                    eventEmitter.emit('user-update', normalizedData);
+                }
+                eventEmitter.emit('message-update', { id: userId, ...data });
+            } else if (change.type === 'removed') {
+                dbMock.dbPurgeUserFromMemory(userId);
+                if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
+                eventEmitter.emit('user-deleted', userId);
+            }
+        };
+
         const usersRef = collection(db, 'users');
         onSnapshot(usersRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                const data = change.doc.data() || {};
-                const userId = data.id || data.uid || change.doc.id;
-                if (change.type === 'added' || change.type === 'modified') {
-                    if ((dbMock as any).restoreUserFromDeleted) {
-                        (dbMock as any).restoreUserFromDeleted(userId, data.email);
-                        const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
-                        if (data.email) {
-                            const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
-                            deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
-                        }
-                    }
-                    const roleLower = (data.role || '').toLowerCase();
-                    const matchFn = (u: any) => u && (u.id === userId || u.uid === userId || u.firebaseUid === userId || (u.email && data.email && u.email.toLowerCase() === data.email.toLowerCase()));
-
-                    if (roleLower === 'teacher') {
-                        const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'teacher', ...data } as any) || ({ id: userId, role: 'teacher', ...data } as any);
-                        const idx = (dbMock.teachersData || []).findIndex(matchFn);
-                        if (idx === -1) {
-                            dbMock.teachersData.push(normalizedData);
-                        } else {
-                            dbMock.teachersData[idx] = dbMock.normalizeAnyUser({ ...dbMock.teachersData[idx], ...normalizedData } as any) || normalizedData;
-                        }
-                        // Clean up from other role arrays
-                        if (dbMock.studentsData) {
-                            let sIdx;
-                            while ((sIdx = dbMock.studentsData.findIndex(matchFn)) !== -1) dbMock.studentsData.splice(sIdx, 1);
-                        }
-                        if (dbMock.adminsData) {
-                            let aIdx;
-                            while ((aIdx = dbMock.adminsData.findIndex(matchFn)) !== -1) dbMock.adminsData.splice(aIdx, 1);
-                        }
-                        eventEmitter.emit('user-updated', userId);
-                        eventEmitter.emit('user-update', normalizedData);
-                    } else if (roleLower === 'admin') {
-                        const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'admin', ...data } as any) || ({ id: userId, role: 'admin', ...data } as any);
-                        const idx = (dbMock.adminsData || []).findIndex(matchFn);
-                        if (idx === -1) {
-                            dbMock.adminsData.push(normalizedData);
-                        } else {
-                            dbMock.adminsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.adminsData[idx], ...normalizedData } as any) || normalizedData;
-                        }
-                        // Clean up from other role arrays
-                        if (dbMock.studentsData) {
-                            let sIdx;
-                            while ((sIdx = dbMock.studentsData.findIndex(matchFn)) !== -1) dbMock.studentsData.splice(sIdx, 1);
-                        }
-                        if (dbMock.teachersData) {
-                            let tIdx;
-                            while ((tIdx = dbMock.teachersData.findIndex(matchFn)) !== -1) dbMock.teachersData.splice(tIdx, 1);
-                        }
-                        eventEmitter.emit('user-updated', userId);
-                        eventEmitter.emit('user-update', normalizedData);
-                    } else {
-                        // All non-teacher, non-admin user records are treated as students
-                        const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'student', ...data } as any) || ({ id: userId, role: 'student', ...data } as any);
-                        const idx = (dbMock.studentsData || []).findIndex(matchFn);
-                        if (idx === -1) {
-                            dbMock.studentsData.push(normalizedData);
-                        } else {
-                            dbMock.studentsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.studentsData[idx], ...normalizedData } as any) || normalizedData;
-                        }
-                        // Clean up from other role arrays
-                        if (dbMock.teachersData) {
-                            let tIdx;
-                            while ((tIdx = dbMock.teachersData.findIndex(matchFn)) !== -1) dbMock.teachersData.splice(tIdx, 1);
-                        }
-                        if (dbMock.adminsData) {
-                            let aIdx;
-                            while ((aIdx = dbMock.adminsData.findIndex(matchFn)) !== -1) dbMock.adminsData.splice(aIdx, 1);
-                        }
-                        eventEmitter.emit('user-updated', userId);
-                        eventEmitter.emit('user-update', normalizedData);
-                    }
-                    eventEmitter.emit('message-update', { id: userId, ...data });
-                } else if (change.type === 'removed') {
-                    dbMock.dbPurgeUserFromMemory(userId);
-                    if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
-                    eventEmitter.emit('user-deleted', userId);
-                }
-            });
+            snapshot.docChanges().forEach(handleUserChange);
         }, (err) => handleSyncError('Firestore users sync:', err));
+
+        const firestoreUsersRef = collection(db, 'firestore_users');
+        onSnapshot(firestoreUsersRef, (snapshot) => {
+            snapshot.docChanges().forEach(handleUserChange);
+        }, (err) => handleSyncError('Firestore firestore_users sync:', err));
 
         // 12b. Students sync (students collection)
         const studentsRef = collection(db, 'students');
@@ -1217,14 +1220,19 @@ export const syncMarkConversationAsReadInFirestore = async (conversationId: stri
     }
 };
 
-export const syncConversationTeacherInFirestore = async (studentId: string, teacherId: string | null, teacherName?: string | null) => {
+export const syncConversationTeacherInFirestore = async (studentIdOrConvoId: string, teacherId: string | null, teacherName?: string | null) => {
     try {
-        if (!studentId) return;
-        await safeSetDoc(doc(db, 'firestore_conversations', studentId), {
+        if (!studentIdOrConvoId) return;
+        const cleanId = studentIdOrConvoId.replace(/^direct_/, '');
+        const payload = {
             teacherId: teacherId || null,
             teacherName: teacherName || null,
             updatedAt: serverTimestamp()
-        }, { merge: true });
+        };
+        await Promise.all([
+            safeSetDoc(doc(db, 'firestore_conversations', cleanId), payload, { merge: true }),
+            safeSetDoc(doc(db, 'firestore_conversations', `direct_${cleanId}`), payload, { merge: true })
+        ]);
     } catch (e) {
         console.warn('Failed to sync conversation teacher in Firestore:', e);
     }

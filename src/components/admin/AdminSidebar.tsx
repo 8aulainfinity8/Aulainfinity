@@ -5,7 +5,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../contexts/AuthContext';
 import { NewCommentsContext } from '../../contexts/NewCommentsContext';
 import { AdminNotificationContext } from '../../contexts/AdminNotificationContext';
-import { useRole } from '../../hooks/useRole';
+import { useAuthorization } from '../../hooks/useAuthorization';
 import {
     DashboardIcon,
     UsersIcon,
@@ -75,7 +75,7 @@ const NavItem: React.FC<{
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarState, onItemClick }) => {
   const { logout } = useContext(AuthContext);
-  const { isTeacher } = useRole();
+  const { isTeacher } = useAuthorization();
   const { t } = useI18n();
   const { newCommentsCount } = useContext(NewCommentsContext);
   const { 

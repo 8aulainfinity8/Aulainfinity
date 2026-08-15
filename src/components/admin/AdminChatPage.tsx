@@ -11,7 +11,7 @@ import { PaperAirplaneIcon, ChatBubbleLeftRightIcon, UserCircleIcon, PencilIcon,
 import { Spinner } from '../ui/Spinner';
 import { EmptyState } from '../ui/EmptyState';
 import { CameraModal } from '../CameraModal';
-import { Phone, PenTool, Users, ArrowLeft, Video, X } from 'lucide-react';
+import { Phone, PenTool, Users, ArrowLeft, Video, X, CheckCircle } from 'lucide-react';
 import { VoiceGroupCall } from '../VoiceGroupCall';
 import { Whiteboard } from '../Whiteboard';
 import { ClassReplayModal } from '../ClassReplayModal';
@@ -276,7 +276,7 @@ const MessageBubble: React.FC<{
 export const AdminChatPage: React.FC = () => {
     const { user } = useContext(AuthContext);
     const isTeacher = user?.role === 'teacher';
-    const isApprovedTeacher = isTeacher ? (user as any).isApprovedForTutoring === true : true;
+    const isApprovedTeacher = isTeacher ? (user as any).isApprovedForTutoring !== false : true;
     const queryClient = useQueryClient();
     const { conversations, isConversationsLoading } = useContext(AdminNotificationContext);
 
@@ -1201,51 +1201,65 @@ export const AdminChatPage: React.FC = () => {
                                     </button>
                                 )}
 
-                                {activeTab !== 'group' && (
-                                    isTeacher ? (
-                                        activeConversation?.teacherId === user?.id ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (!isApprovedTeacher) return;
-                                                    assignMutation.mutate({ tId: null });
-                                                }}
-                                                disabled={assignMutation.isPending || !isApprovedTeacher}
-                                                className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/45 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/40 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                            >
-                                                <span className="hidden sm:inline">Liberar ❌</span>
-                                                <span className="sm:hidden">Liberar</span>
-                                            </button>
+                                {activeTab !== 'group' && selectedConversationId && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowResolveConfirmModal(true)}
+                                            className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm cursor-pointer"
+                                            title="Dar por resuelta esta duda y cerrar el chat"
+                                        >
+                                            <CheckCircle className="w-3.5 h-3.5" />
+                                            <span className="hidden sm:inline">Duda resuelta</span>
+                                            <span className="sm:hidden">Resuelta</span>
+                                        </button>
+
+                                        {isTeacher ? (
+                                            activeConversation?.teacherId === user?.id ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (!isApprovedTeacher) return;
+                                                        assignMutation.mutate({ tId: null });
+                                                    }}
+                                                    disabled={assignMutation.isPending || !isApprovedTeacher}
+                                                    className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/45 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/40 rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                                    title="Liberar duda para que la atienda otro profesor"
+                                                >
+                                                    <span className="hidden sm:inline">Liberar ❌</span>
+                                                    <span className="sm:hidden">Liberar</span>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (!isApprovedTeacher) return;
+                                                        assignMutation.mutate({ tId: user?.id || null });
+                                                    }}
+                                                    disabled={assignMutation.isPending || !isApprovedTeacher}
+                                                    className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                                >
+                                                    <span className="hidden sm:inline">Elegir 👋</span>
+                                                    <span className="sm:hidden">Elegir</span>
+                                                </button>
+                                            )
                                         ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (!isApprovedTeacher) return;
-                                                    assignMutation.mutate({ tId: user?.id || null });
-                                                }}
-                                                disabled={assignMutation.isPending || !isApprovedTeacher}
-                                                className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                                            >
-                                                <span className="hidden sm:inline">Elegir 👋</span>
-                                                <span className="sm:hidden">Elegir</span>
-                                            </button>
-                                        )
-                                    ) : (
-                                        <div className="flex items-center gap-2 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 bg-slate-50 dark:bg-slate-800 shrink-0">
-                                            <span className="text-[10px] text-slate-550 dark:text-slate-400 font-extrabold uppercase tracking-wide px-1.5 whitespace-nowrap hidden sm:block">Tutor:</span>
-                                            <select
-                                                disabled={assignMutation.isPending}
-                                                value={activeConversation?.teacherId || ''}
-                                                onChange={(e) => assignMutation.mutate({ tId: e.target.value || null })}
-                                                className="bg-white dark:bg-slate-700 border-none rounded-lg text-xs py-1.5 px-2.5 font-bold text-slate-800 dark:text-slate-150 focus:ring-1 focus:ring-primary outline-none cursor-pointer max-w-[120px]"
-                                            >
-                                                <option value="">Soporte</option>
-                                                {teachers?.map(t => (
-                                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )
+                                            <div className="flex items-center gap-2 border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 bg-slate-50 dark:bg-slate-800 shrink-0">
+                                                <span className="text-[10px] text-slate-550 dark:text-slate-400 font-extrabold uppercase tracking-wide px-1.5 whitespace-nowrap hidden sm:block">Tutor:</span>
+                                                <select
+                                                    disabled={assignMutation.isPending}
+                                                    value={activeConversation?.teacherId || ''}
+                                                    onChange={(e) => assignMutation.mutate({ tId: e.target.value || null })}
+                                                    className="bg-white dark:bg-slate-700 border-none rounded-lg text-xs py-1.5 px-2.5 font-bold text-slate-800 dark:text-slate-150 focus:ring-1 focus:ring-primary outline-none cursor-pointer max-w-[120px]"
+                                                >
+                                                    <option value="">Soporte</option>
+                                                    {teachers?.map(t => (
+                                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
 
 
@@ -1303,7 +1317,7 @@ export const AdminChatPage: React.FC = () => {
                         )}
 
                         {showWhiteboard && (
-                            <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex flex-col p-0 sm:p-4 animate-fade-in w-full h-full">
+                            <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex flex-col p-0 sm:p-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] animate-fade-in w-full h-full">
                                 <div className="flex-1 bg-white dark:bg-slate-900 rounded-none sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col border border-slate-800 w-full h-full">
                                     <Whiteboard 
                                         courseId={selectedConversationId || ''} 
