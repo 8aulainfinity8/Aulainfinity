@@ -7,11 +7,11 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  limitToLast,
+  limitToLast, 
   serverTimestamp, 
-  increment,
-  setDoc,
-  getDoc
+  increment, 
+  setDoc, 
+  getDoc 
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import * as api from '../services/api';

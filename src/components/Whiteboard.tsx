@@ -778,10 +778,9 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
     // 1. Sync Active state and student drawing permissions of the whiteboard
     useEffect(() => {
         if (!courseId) return;
-        const boardMetaRef = doc(db, 'whiteboardMeta', courseId);
+        const boardMetaRef = doc(db, 'whiteboards', courseId);
         
         const canInitiate = isTeacher || (user as any)?.canInitiateWhiteboard === true;
-
         if (canInitiate) {
             // Auto-activate whiteboard when opened by authorized initiator (teacher/admin or student with permission)
             setDoc(boardMetaRef, {
@@ -792,43 +791,40 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
         }
 
         const unsubMeta = onSnapshot(boardMetaRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.data();
-                setIsActive(data.active === true);
-                if (data.bgPattern) {
-                    setBgPattern(data.bgPattern);
-                }
-                const isAllowed = data.allowStudentDrawing === true;
-                setAllowStudentDrawing(isAllowed);
-                if (!isTeacher && prevAllowRef.current !== null && prevAllowRef.current !== isAllowed) {
-                    if (isAllowed) {
-                        showToast("✍️ El profesor ha activado la escritura. ¡Ya puedes escribir en la pizarra!");
-                    } else {
-                        showToast("🔒 La pizarra ha vuelto a modo solo lectura.");
+                if (snapshot.exists()) {
+                    const data = snapshot.data();
+                    setIsActive(data.active === true);
+                    if (data.bgPattern) {
+                        setBgPattern(data.bgPattern);
                     }
+                    const isAllowed = data.allowStudentDrawing === true;
+                    setAllowStudentDrawing(isAllowed);
+                    
+                    if (!isTeacher && prevAllowRef.current !== null && prevAllowRef.current !== isAllowed) {
+                        if (isAllowed) {
+                            showToast("✍️ El profesor ha activado la escritura. ¡Ya puedes escribir en la pizarra!");
+                        } else {
+                            showToast("🔒 La pizarra ha vuelto a modo solo lectura.");
+                        }
+                    }
+                    prevAllowRef.current = isAllowed;
                 }
-                prevAllowRef.current = isAllowed;
-            } else {
-                setIsActive(canInitiate);
-                setAllowStudentDrawing(false);
-                prevAllowRef.current = false;
-            }
-        });
+            }, (err) => console.warn('Firestore whiteboard listener:', err.message));
 
         return () => unsubMeta();
     }, [courseId, currentUserName, isTeacher, user]);
 
-    const toggleAllowStudentDrawing = async () => {
+        const toggleAllowStudentDrawing = async () => {
         if (!isTeacher) return;
         const nextState = !allowStudentDrawing;
         setAllowStudentDrawing(nextState);
         try {
-            const boardMetaRef = doc(db, 'whiteboardMeta', courseId);
+            const boardMetaRef = doc(db, 'whiteboards', courseId);
             await setDoc(boardMetaRef, { allowStudentDrawing: nextState }, { merge: true });
-            showToast(nextState ? "✏️ Permisos de escritura activados para los alumnos" : "🔒 Alumnos puestos en modo solo lectura");
         } catch (err) {
             console.error("Error updating student drawing permission:", err);
         }
+        showToast(nextState ? "✏️ Permisos de escritura activados para los alumnos" : "🔒 Alumnos puestos en modo solo lectura");
     };
 
     // Auto-center whiteboard for student on first load if content exists
@@ -848,7 +844,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
         setBgPattern(pattern);
         localStorage.setItem('whiteboard_bg_pattern', pattern);
         try {
-            const boardMetaRef = doc(db, 'whiteboardMeta', courseId);
+            const boardMetaRef = doc(db, 'whiteboards', courseId);
             await setDoc(boardMetaRef, { bgPattern: pattern }, { merge: true });
         } catch (err) {
             console.error("Error setting whiteboard bgPattern: ", err);
@@ -1314,7 +1310,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
         try {
             if (db && courseId) {
                 // Deactivate board in meta
-                const docRef = doc(db, 'whiteboardMeta', courseId);
+                const docRef = doc(db, 'whiteboards', courseId);
                 await setDoc(docRef, {
                     active: false,
                     closedAt: new Date().toISOString(),
@@ -1400,7 +1396,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({ courseId, isTeacher: isT
         }
         const nextState = true;
         try {
-            const docRef = doc(db, 'whiteboardMeta', courseId);
+            const docRef = doc(db, 'whiteboards', courseId);
             await setDoc(docRef, { active: nextState, updatedBy: user?.name, updatedAt: new Date().toISOString() }, { merge: true });
             setIsActive(nextState);
             setTool('pencil');

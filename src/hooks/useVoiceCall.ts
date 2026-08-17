@@ -7,8 +7,8 @@ import {
   deleteDoc, 
   collection, 
   addDoc, 
-  serverTimestamp,
-  deleteField
+  serverTimestamp, 
+  deleteField 
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { getDynamicRTCConfiguration, setAudioBitrate, createSilentAudioStream } from '../services/webrtcSignaling';
@@ -330,7 +330,7 @@ export function useVoiceCall({
         answer: deleteField()
       }, { merge: true });
 
-      const voiceRoomRef = doc(db, 'voiceRooms', chatId);
+      const voiceRoomRef = doc(db, 'voice_group_calls', chatId);
       await setDoc(voiceRoomRef, {
         courseId: chatId,
         active: true,
@@ -397,7 +397,7 @@ export function useVoiceCall({
         receiverId: userId
       });
 
-      const voiceRoomRef = doc(db, 'voiceRooms', chatId);
+      const voiceRoomRef = doc(db, 'voice_group_calls', chatId);
       await setDoc(voiceRoomRef, {
         active: true,
         updatedAt: new Date().toISOString()
@@ -416,7 +416,7 @@ export function useVoiceCall({
       try {
         const signalDocRef = doc(db, 'chats', chatId, 'signal', 'callData');
         await deleteDoc(signalDocRef).catch(() => {});
-        const voiceRoomRef = doc(db, 'voiceRooms', chatId);
+        const voiceRoomRef = doc(db, 'voice_group_calls', chatId);
         await setDoc(voiceRoomRef, {
           active: false,
           participants: [],

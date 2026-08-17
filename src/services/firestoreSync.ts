@@ -67,7 +67,7 @@ export const initAppConfigSync = () => {
             } else if (dbMock.appConfigData) {
                 syncAppConfigToFirestore(dbMock.appConfigData);
             }
-        }, (err) => handleSyncError('Firestore app config sync:', err));
+        }, (err: any) => handleSyncError('Firestore app config sync:', err));
     } catch (e) {
         console.warn('Failed to initialize app config sync:', e);
     }
@@ -97,7 +97,9 @@ export const initFirestoreSync = () => {
     try {
         const currentAuth = auth.currentUser;
         const currentUserObj = currentAuth ? dbMock.dbFindUserAnywhere(currentAuth.uid) : null;
-        const isStudentRole = currentAuth && (!currentUserObj || currentUserObj.role === 'student');
+        const isEmailVerified = currentAuth?.emailVerified === true;
+        const isStudentRole = isEmailVerified && currentAuth && (!currentUserObj || currentUserObj.role === 'student');
+        const isTeacherRole = isEmailVerified && currentAuth && currentUserObj?.role === 'teacher';
 
         const onSnapshot: typeof originalOnSnapshot = (refOrQuery: any, ...args: any[]): any => {
             const unsub = (originalOnSnapshot as any)(refOrQuery, ...args);
@@ -106,39 +108,42 @@ export const initFirestoreSync = () => {
         };
 
         // 0. Sync deleted items blacklist across browser reloads
-        const deletedRef = collection(db, 'firestore_deleted_items');
-        getDocs(deletedRef).then(snapshot => {
-            snapshot.docs.forEach((docSnap) => {
-                const data = docSnap.data();
-                const idVal = data.id || docSnap.id;
-                const type = data.type || 'user';
-                if (idVal) {
-                    dbMock.markItemAsDeleted(idVal, type);
-                }
-            });
-        }).catch(err => console.warn('[FirestoreSync] Initial deleted_items fetch warning:', err.message));
+        if (isEmailVerified && currentUserObj?.role === 'admin') {
+            const deletedRef = collection(db, 'firestore_deleted_items');
+            getDocs(deletedRef).then((snapshot: any) => {
+                snapshot.docs.forEach((docSnap: any) => {
+                    const data = docSnap.data();
+                    const idVal = data.id || docSnap.id;
+                    const type = data.type || 'user';
+                    if (idVal) {
+                        dbMock.markItemAsDeleted(idVal, type);
+                    }
+                });
+            }).catch(err => console.warn('[FirestoreSync] Initial deleted_items fetch warning:', err.message));
 
-        onSnapshot(deletedRef, (snapshot) => {
-            snapshot.docs.forEach((docSnap) => {
-                const data = docSnap.data();
-                const idVal = data.id || docSnap.id;
-                const type = data.type || 'user';
-                if (idVal) {
-                    dbMock.markItemAsDeleted(idVal, type);
-                }
-            });
-        }, (err) => console.warn('[FirestoreSync] deleted_items listener warning:', err.message));
+            onSnapshot(deletedRef, (snapshot: any) => {
+                snapshot.docs.forEach((docSnap: any) => {
+                    const data = docSnap.data();
+                    const idVal = data.id || docSnap.id;
+                    const type = data.type || 'user';
+                    if (idVal) {
+                        dbMock.markItemAsDeleted(idVal, type);
+                    }
+                });
+            }, (err) => console.warn('[FirestoreSync] deleted_items listener warning:', err.message));
+        }
         // Nota: No llamamos a syncAllUsersToFirestore() automáticamente al arrancar para evitar exceder la cuota de escrituras de Firestore.
         // La sincronización inicial se puede activar de forma manual desde el panel de pruebas si es necesario.
 
         // 1. Peer Messages real-time sync
-        const peerMsgsRef = collection(db, 'firestore_peer_messages');
+        if (currentUserObj?.role === 'admin') {
+            const peerMsgsRef = collection(db, 'firestore_peer_messages');
         const qPeer = query(peerMsgsRef, orderBy('createdAt', 'asc'), limit(500));
         let isInitialPeer = true;
-        onSnapshot(qPeer, (snapshot) => {
+        onSnapshot(qPeer, (snapshot: any) => {
             const isInitial = isInitialPeer;
             isInitialPeer = false;
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const msgId = data.id || change.doc.id;
                 if (change.type === 'added') {
@@ -199,16 +204,18 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore peer chat sync:', err));
+        }, (err: any) => handleSyncError('Firestore peer chat sync:', err));
+        }
 
         // 2. Direct Messages (Student - Teacher / Admin)
-        const directMsgsRef = collection(db, 'firestore_direct_messages');
+        if (currentUserObj?.role === 'admin') {
+            const directMsgsRef = collection(db, 'firestore_direct_messages');
         const qDirect = query(directMsgsRef, orderBy('createdAt', 'asc'), limit(500));
         let isInitialDirect = true;
-        onSnapshot(qDirect, (snapshot) => {
+        onSnapshot(qDirect, (snapshot: any) => {
             const isInitial = isInitialDirect;
             isInitialDirect = false;
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const msgId = data.id || change.doc.id;
                 if (change.type === 'added') {
@@ -263,16 +270,18 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore direct chat sync:', err));
+        }, (err: any) => handleSyncError('Firestore direct chat sync:', err));
+        }
 
         // 3. Teacher Group Messages
-        const teacherMsgsRef = collection(db, 'firestore_teacher_messages');
+        if (currentUserObj?.role === 'admin' || isTeacherRole) {
+            const teacherMsgsRef = collection(db, 'firestore_teacher_messages');
         const qTeacher = query(teacherMsgsRef, orderBy('createdAt', 'asc'), limit(500));
         let isInitialTeacher = true;
-        onSnapshot(qTeacher, (snapshot) => {
+        onSnapshot(qTeacher, (snapshot: any) => {
             const isInitial = isInitialTeacher;
             isInitialTeacher = false;
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const msgId = data.id || change.doc.id;
                 if (change.type === 'added') {
@@ -317,16 +326,18 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore teacher chat sync:', err));
+        }, (err: any) => handleSyncError('Firestore teacher chat sync:', err));
+        }
 
         // 4. Course Group Messages
-        const courseMsgsRef = collection(db, 'firestore_course_messages');
+        if (currentUserObj?.role === 'admin') {
+            const courseMsgsRef = collection(db, 'firestore_course_messages');
         const qCourse = query(courseMsgsRef, orderBy('createdAt', 'asc'), limit(500));
         let isInitialCourse = true;
-        onSnapshot(qCourse, (snapshot) => {
+        onSnapshot(qCourse, (snapshot: any) => {
             const isInitial = isInitialCourse;
             isInitialCourse = false;
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const msgId = data.id || change.doc.id;
                 if (change.type === 'added') {
@@ -373,17 +384,20 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore course chat sync:', err));
+        }, (err: any) => handleSyncError('Firestore course chat sync:', err));
+        }
 
         // 4.5. Voice / Video Rooms real-time sync for Instant Call Alerts
-        const voiceRoomsRef = collection(db, 'voiceRooms');
+        const actualIsApprovedTeacher = isEmailVerified && (currentUserObj?.role === 'admin' || (currentUserObj?.role === 'teacher' && (currentUserObj as any).isApprovedForTutoring === true));
+        if (actualIsApprovedTeacher) {
+            const voice_group_callsRef = collection(db, 'voice_group_calls');
         const knownRoomParticipants = new Map<string, Set<string>>();
         let isInitialVoice = true;
 
-        onSnapshot(voiceRoomsRef, (snapshot) => {
+        onSnapshot(voice_group_callsRef, (snapshot: any) => {
             const isInitial = isInitialVoice;
             isInitialVoice = false;
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const roomId = change.doc.id;
                 const data = change.doc.data() || {};
                 const participants: any[] = data.participants || [];
@@ -424,12 +438,16 @@ export const initFirestoreSync = () => {
                     knownRoomParticipants.delete(roomId);
                 }
             });
-        }, (err) => handleSyncError('Firestore voice rooms sync:', err));
+        }, (err: any) => handleSyncError('Firestore voice rooms sync:', err));
+        }
 
         // 4.6. Direct Conversations Metadata & Unread Badges ("Globos") Sync
         const conversationsRef = collection(db, 'firestore_conversations');
-        onSnapshot(conversationsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        let conversationsQuery = conversationsRef as any;
+        if (isStudentRole && currentAuth) conversationsQuery = query(conversationsRef, where('studentId', '==', currentAuth.uid));
+        else if (isTeacherRole && currentAuth) conversationsQuery = query(conversationsRef, where('teacherId', '==', currentAuth.uid));
+        onSnapshot(conversationsQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const rawConvoId = data.id || change.doc.id;
                 const { studentId: parsedStudentId, teacherId: parsedTeacherId } = api.parseConversationParticipants(rawConvoId);
@@ -493,12 +511,13 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('direct-message-update', { conversationId: convoId, closed: true });
                 }
             });
-        }, (err) => handleSyncError('Firestore conversations sync:', err));
+        }, (err: any) => handleSyncError('Firestore conversations sync:', err));
 
         // 4.6b. Closed Support Conversations Real-time Sync
-        const closedConvosRef = collection(db, 'firestore_closed_conversations');
-        onSnapshot(closedConvosRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const closedConvosRef = collection(db, 'firestore_closed_conversations');
+            onSnapshot(closedConvosRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const id = change.doc.id;
                 if (change.type === 'added' || change.type === 'modified') {
                     dbMock.closedSupportConversationIds.add(id);
@@ -516,12 +535,18 @@ export const initFirestoreSync = () => {
                     dbMock.closedSupportConversationIds.delete(id);
                 }
             });
-        }, (err) => handleSyncError('Firestore closed convos sync:', err));
+        }, (err: any) => handleSyncError('Firestore closed convos sync:', err));
+        }
 
         // 4.7. Peer Conversations Metadata & Unread Badges ("Globos") Sync
         const peerConvosRef = collection(db, 'firestore_peer_conversations');
-        onSnapshot(peerConvosRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        let peerConvosQuery = peerConvosRef as any;
+        const actualIsApprovedTeacherPeer = isEmailVerified && (currentUserObj?.role === 'admin' || (currentUserObj?.role === 'teacher' && (currentUserObj as any).isApprovedForTutoring === true));
+        if (!actualIsApprovedTeacherPeer && currentAuth) {
+            peerConvosQuery = query(peerConvosRef, where('participantIds', 'array-contains', currentAuth.uid));
+        }
+        onSnapshot(peerConvosQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const convoId = data.id || change.doc.id;
                 if (change.type === 'added' || change.type === 'modified') {
@@ -548,51 +573,58 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('peer-message-update', { conversationId: convoId });
                 }
             });
-        }, (err) => handleSyncError('Firestore peer conversations sync:', err));
+        }, (err: any) => handleSyncError('Firestore peer conversations sync:', err));
 
         // 5. Tutoring Requests sync
-        const tutoringRef = collection(db, 'firestore_tutoring_requests');
-        const tutoringQuery = isStudentRole && currentAuth 
-            ? query(tutoringRef, where('studentId', '==', currentAuth.uid)) 
-            : tutoringRef;
-        onSnapshot(tutoringQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                const data = change.doc.data() || {};
-                const reqId = data.id || change.doc.id;
-                if (dbMock.deletedTutoringRequestIds.has(reqId)) return;
-                const idx = dbMock.tutoringRequestsData.findIndex(r => r.id === reqId);
-                if (change.type === 'added' && idx === -1) {
-                    dbMock.tutoringRequestsData.unshift({
-                        id: reqId,
-                        ...data
-                    } as any);
-                    eventEmitter.emit('tutoring-requests-updated', reqId);
-                } else if (change.type === 'modified' && idx > -1) {
-                    dbMock.tutoringRequestsData[idx] = { ...dbMock.tutoringRequestsData[idx], ...data } as any;
-                    eventEmitter.emit('tutoring-requests-updated', reqId);
-                } else if (change.type === 'removed' && idx > -1) {
-                    dbMock.tutoringRequestsData.splice(idx, 1);
-                    eventEmitter.emit('tutoring-requests-updated', reqId);
-                }
-            });
-        }, (err) => handleSyncError('Firestore tutoring sync:', err));
+        if (currentAuth) {
+            const tutoringRef = collection(db, 'firestore_tutoring_requests');
+            const tutoringQuery = isStudentRole 
+                ? query(tutoringRef, where('studentId', '==', currentAuth.uid)) 
+                : tutoringRef;
+            
+            // Only admins or approved teachers (or the student himself) should ideally sync.
+            // The Firestore Rules will ultimately enforce this, but we filter here to avoid noise/errors.
+            if (currentUserObj?.role === 'admin' || isStudentRole || (currentUserObj?.role === 'teacher' && (currentUserObj as any).isApprovedForTutoring)) {
+                onSnapshot(tutoringQuery, (snapshot: any) => {
+                    snapshot.docChanges().forEach((change: any) => {
+                        const data = change.doc.data() || {};
+                        const reqId = data.id || change.doc.id;
+                        if (dbMock.deletedTutoringRequestIds.has(reqId)) return;
+                        const idx = dbMock.tutoringRequestsData.findIndex(r => r.id === reqId);
+                        if (change.type === 'added' && idx === -1) {
+                            dbMock.tutoringRequestsData.unshift({
+                                id: reqId,
+                                ...data
+                            } as any);
+                            eventEmitter.emit('tutoring-requests-updated', reqId);
+                        } else if (change.type === 'modified' && idx > -1) {
+                            dbMock.tutoringRequestsData[idx] = { ...dbMock.tutoringRequestsData[idx], ...data } as any;
+                            eventEmitter.emit('tutoring-requests-updated', reqId);
+                        } else if (change.type === 'removed' && idx > -1) {
+                            dbMock.tutoringRequestsData.splice(idx, 1);
+                            eventEmitter.emit('tutoring-requests-updated', reqId);
+                        }
+                    });
+                }, (err: any) => handleSyncError('Firestore tutoring sync:', err));
+            }
+        }
 
-        // 5b. Student Course Progress sync (filtered by studentId)
-        if (currentAuth && isStudentRole) {
+        // 5b. Student Course Progress sync
+        if (currentUserObj?.role === 'admin') {
             const progressRef = collection(db, 'student_course_progress');
-            const progressQuery = query(progressRef, where('studentId', '==', currentAuth.uid));
-            onSnapshot(progressQuery, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
+            onSnapshot(progressRef, (snapshot: any) => {
+                snapshot.docChanges().forEach((change: any) => {
                     const data = change.doc.data() || {};
                     eventEmitter.emit('student-progress-updated', data);
                 });
-            }, (err) => handleSyncError('Firestore student progress sync:', err));
+            }, (err: any) => handleSyncError('Firestore student progress sync:', err));
         }
 
         // 6. Agenda Events sync (firestore_agenda_events)
-        const agendaRef = collection(db, 'firestore_agenda_events');
-        onSnapshot(agendaRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const agendaRef = collection(db, 'firestore_agenda_events');
+            onSnapshot(agendaRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const eventId = data.id || change.doc.id;
                 if (dbMock.deletedAgendaIds.has(eventId)) return;
@@ -617,12 +649,14 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('agenda-updated', eventId);
                 }
             });
-        }, (err) => handleSyncError('Firestore agenda sync:', err));
+        }, (err: any) => handleSyncError('Firestore agenda sync:', err));
+        }
 
         // 7. Comments sync (firestore_comments)
-        const commentsRef = collection(db, 'firestore_comments');
-        onSnapshot(commentsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const commentsRef = collection(db, 'firestore_comments');
+            onSnapshot(commentsRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const commentId = data.id || change.doc.id;
                 if (dbMock.deletedCommentIds.has(commentId)) return;
@@ -650,48 +684,67 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore comments sync:', err));
+        }, (err: any) => handleSyncError('Firestore comments sync:', err));
+        }
 
         // 8. Topic Requests sync (firestore_topic_requests)
-        const topicRequestsRef = collection(db, 'firestore_topic_requests');
-        onSnapshot(topicRequestsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                const data = change.doc.data() || {};
-                const reqId = data.id || change.doc.id;
-                if (dbMock.deletedTopicRequestIds.has(reqId)) return;
-                const idx = (dbMock.topicRequestsData || []).findIndex(r => r.id === reqId);
-                if (change.type === 'added' || change.type === 'modified') {
-                    const reqObj = {
-                        id: reqId,
-                        studentId: data.studentId,
-                        studentName: data.studentName,
-                        courseName: data.courseName,
-                        topic: data.topic,
-                        description: data.description,
-                        status: data.status || 'pending',
-                        timestamp: data.timestamp || new Date().toISOString(),
-                        seenByAdmin: data.seenByAdmin,
-                        seenByTeacher: data.seenByTeacher
-                    };
-                    if (idx === -1) {
-                        dbMock.topicRequestsData.push(reqObj as any);
-                    } else {
-                        dbMock.topicRequestsData[idx] = reqObj as any;
-                    }
-                    eventEmitter.emit('request-update', reqObj);
-                } else if (change.type === 'removed') {
-                    if (idx > -1) {
-                        const [deleted] = dbMock.topicRequestsData.splice(idx, 1);
-                        eventEmitter.emit('request-deleted', deleted);
-                    }
-                }
-            });
-        }, (err) => handleSyncError('Firestore topic requests sync:', err));
+        if (currentAuth) {
+            const topicRequestsRef = collection(db, 'firestore_topic_requests');
+            let topicRequestsQuery: any = null;
 
-        // 9. Student Answers sync (firestore_student_answers)
-        const answersRef = collection(db, 'firestore_student_answers');
-        onSnapshot(answersRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+            if (isEmailVerified && (currentUserObj?.role === 'admin' || (currentUserObj?.role === 'teacher' && (currentUserObj as any).isApprovedForTutoring))) {
+                topicRequestsQuery = topicRequestsRef;
+            } else if (isStudentRole) {
+                topicRequestsQuery = query(topicRequestsRef, where('studentId', '==', currentAuth.uid));
+            }
+
+            if (topicRequestsQuery) {
+                onSnapshot(topicRequestsQuery, (snapshot: any) => {
+                    snapshot.docChanges().forEach((change: any) => {
+                        const data = change.doc.data() || {};
+                        const reqId = data.id || change.doc.id;
+                        if (dbMock.deletedTopicRequestIds.has(reqId)) return;
+                        const idx = (dbMock.topicRequestsData || []).findIndex(r => r.id === reqId);
+                        if (change.type === 'added' || change.type === 'modified') {
+                            const reqObj = {
+                                id: reqId,
+                                studentId: data.studentId,
+                                studentName: data.studentName,
+                                courseName: data.courseName,
+                                topic: data.topic,
+                                description: data.description,
+                                status: data.status || 'pending',
+                                timestamp: data.timestamp || new Date().toISOString(),
+                                seenByAdmin: data.seenByAdmin,
+                                seenByTeacher: data.seenByTeacher
+                            };
+                            if (idx === -1) {
+                                dbMock.topicRequestsData.push(reqObj as any);
+                            } else {
+                                dbMock.topicRequestsData[idx] = reqObj as any;
+                            }
+                            eventEmitter.emit('request-update', reqObj);
+                        } else if (change.type === 'removed') {
+                            if (idx > -1) {
+                                const [deleted] = dbMock.topicRequestsData.splice(idx, 1);
+                                eventEmitter.emit('request-deleted', deleted);
+                            }
+                        }
+                    });
+                }, (err: any) => handleSyncError('Firestore topic requests sync:', err));
+            }
+        }
+
+        // 9. Student Answers sync (quiz_answers)
+        let answersQuery: any = null;
+        if (isStudentRole && currentAuth) {
+            answersQuery = query(collection(db, 'quiz_answers'), where('studentId', '==', currentAuth.uid));
+        } else if (currentUserObj?.role === 'admin' || isTeacherRole) {
+            answersQuery = collection(db, 'quiz_answers');
+        }
+        if (answersQuery) {
+            onSnapshot(answersQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const ansId = data.id || change.doc.id;
                 const idx = (dbMock.studentAnswersData || []).findIndex(a => (a as any).id === ansId || (a.studentId === data.studentId && a.videoId === data.videoId && a.timestamp === data.timestamp));
@@ -713,12 +766,14 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('student-answers-updated', ansObj);
                 }
             });
-        }, (err) => handleSyncError('Firestore student answers sync:', err));
+        }, (err: any) => handleSyncError('Firestore student answers sync:', err));
+        }
 
         // 10. Infinity Transactions sync (infinity_transactions)
-        const txRef = collection(db, 'infinity_transactions');
-        onSnapshot(txRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const txRef = collection(db, 'infinity_transactions');
+            onSnapshot(txRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const txId = data.id || change.doc.id;
                 const idx = (dbMock.infinityTransactionsData || []).findIndex(t => t.id === txId);
@@ -739,20 +794,23 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('infinity-transactions-updated', txObj);
                 }
             });
-        }, (err) => handleSyncError('Firestore infinity transactions sync:', err));
+        }, (err: any) => handleSyncError('Firestore infinity transactions sync:', err));
+        }
 
         // 11. Courses sync (courses collection)
         let isFirstCoursesSnapshot = true;
         const coursesRef = collection(db, 'courses');
-        onSnapshot(coursesRef, (snapshot) => {
+        onSnapshot(coursesRef, (snapshot: any) => {
+            let hasChanges = false;
             if (isFirstCoursesSnapshot) {
                 if (dbMock.coursesData) {
                     dbMock.coursesData.length = 0; // Clear mock data
                 }
                 isFirstCoursesSnapshot = false;
-                eventEmitter.emit('courses-updated', { id: 'cleared' });
+                hasChanges = true;
             }
-            snapshot.docChanges().forEach((change) => {
+            snapshot.docChanges().forEach((change: any) => {
+                hasChanges = true;
                 const data = change.doc.data() || {};
                 const courseId = data.id || change.doc.id;
                 const idx = (dbMock.coursesData || []).findIndex(c => c.id === courseId);
@@ -777,15 +835,16 @@ export const initFirestoreSync = () => {
                     } else {
                         dbMock.coursesData[idx] = courseObj as any;
                     }
-                    eventEmitter.emit('courses-updated', courseObj);
                 } else if (change.type === 'removed') {
                     if (idx > -1) {
                         dbMock.coursesData.splice(idx, 1);
-                        eventEmitter.emit('courses-updated', { id: courseId, deleted: true });
                     }
                 }
             });
-        }, (err) => handleSyncError('Firestore courses sync:', err));
+            if (hasChanges) {
+                eventEmitter.emit('courses-updated', dbMock.coursesData);
+            }
+        }, (err: any) => handleSyncError('Firestore courses sync:', err));
 
         // 12. Users sync (users & firestore_users collection)
         const handleUserChange = (change: any) => {
@@ -794,12 +853,6 @@ export const initFirestoreSync = () => {
             if (change.type === 'added' || change.type === 'modified') {
                 if ((dbMock as any).restoreUserFromDeleted) {
                     (dbMock as any).restoreUserFromDeleted(userId, data.email);
-                    const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                    deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
-                    if (data.email) {
-                        const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
-                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
-                    }
                 }
                 const roleLower = (data.role || '').toLowerCase();
                 const matchFn = (u: any) => u && (u.id === userId || u.uid === userId || u.firebaseUid === userId || (u.email && data.email && u.email.toLowerCase() === data.email.toLowerCase()));
@@ -867,31 +920,27 @@ export const initFirestoreSync = () => {
             }
         };
 
-        const usersRef = collection(db, 'users');
-        onSnapshot(usersRef, (snapshot) => {
-            snapshot.docChanges().forEach(handleUserChange);
-        }, (err) => handleSyncError('Firestore users sync:', err));
-
-        const firestoreUsersRef = collection(db, 'firestore_users');
-        onSnapshot(firestoreUsersRef, (snapshot) => {
-            snapshot.docChanges().forEach(handleUserChange);
-        }, (err) => handleSyncError('Firestore firestore_users sync:', err));
+        // Target single currentUser document instead of full collection read
+        const currentUserDocRef = doc(db, 'firestore_users', currentUser.uid);
+        onSnapshot(currentUserDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data() || {};
+                const userId = data.id || data.uid || docSnap.id;
+                const normalizedData = dbMock.normalizeAnyUser({ id: userId, ...data } as any) || ({ id: userId, ...data } as any);
+                eventEmitter.emit('user-updated', userId);
+                eventEmitter.emit('user-update', normalizedData);
+            }
+        }, (err: any) => handleSyncError('Firestore user doc sync:', err));
 
         // 12b. Students sync (students collection)
         const studentsRef = collection(db, 'students');
-        onSnapshot(studentsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        onSnapshot(studentsRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const userId = data.id || data.uid || change.doc.id;
                 if (change.type === 'added' || change.type === 'modified') {
                     if ((dbMock as any).restoreUserFromDeleted) {
                         (dbMock as any).restoreUserFromDeleted(userId, data.email);
-                        const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
-                        if (data.email) {
-                            const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
-                            deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
-                        }
                     }
                     const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'student', ...data } as any) || ({ id: userId, role: 'student', ...data } as any);
                     const idx = (dbMock.studentsData || []).findIndex(s => s.id === userId || (s as any).uid === userId || (s as any).firebaseUid === userId || (s.email && data.email && s.email.toLowerCase() === data.email.toLowerCase()));
@@ -908,23 +957,17 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('user-deleted', userId);
                 }
             });
-        }, (err) => handleSyncError('Firestore students collection sync:', err));
+        }, (err: any) => handleSyncError('Firestore students collection sync:', err));
 
         // 12c. Teachers sync (teachers collection)
         const teachersRef = collection(db, 'teachers');
-        onSnapshot(teachersRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        onSnapshot(teachersRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const userId = data.id || data.uid || change.doc.id;
                 if (change.type === 'added' || change.type === 'modified') {
                     if ((dbMock as any).restoreUserFromDeleted) {
                         (dbMock as any).restoreUserFromDeleted(userId, data.email);
-                        const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
-                        if (data.email) {
-                            const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
-                            deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
-                        }
                     }
                     const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'teacher', ...data } as any) || ({ id: userId, role: 'teacher', ...data } as any);
                     const idx = (dbMock.teachersData || []).findIndex(t => t.id === userId || (t as any).uid === userId || (t as any).firebaseUid === userId || (t.email && data.email && t.email.toLowerCase() === data.email.toLowerCase()));
@@ -941,48 +984,45 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('user-deleted', userId);
                 }
             });
-        }, (err) => handleSyncError('Firestore teachers collection sync:', err));
+        }, (err: any) => handleSyncError('Firestore teachers collection sync:', err));
 
         // 12d. Admins sync (admins collection)
-        const adminsRef = collection(db, 'admins');
-        onSnapshot(adminsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                const data = change.doc.data() || {};
-                const userId = data.id || data.uid || change.doc.id;
-                if (change.type === 'added' || change.type === 'modified') {
-                    if ((dbMock as any).restoreUserFromDeleted) {
-                        (dbMock as any).restoreUserFromDeleted(userId, data.email);
-                        const cleanId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_');
-                        deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanId}`)).catch(() => {});
-                        if (data.email) {
-                            const cleanEmail = String(data.email).replace(/[^a-zA-Z0-9_-]/g, '_');
-                            deleteDoc(doc(db, 'firestore_deleted_items', `user_${cleanEmail}`)).catch(() => {});
+        if (currentUserObj?.role === 'admin') {
+            const adminsRef = collection(db, 'admins');
+            onSnapshot(adminsRef, (snapshot: any) => {
+                snapshot.docChanges().forEach((change: any) => {
+                    const data = change.doc.data() || {};
+                    const userId = data.id || data.uid || change.doc.id;
+                    if (change.type === 'added' || change.type === 'modified') {
+                        if ((dbMock as any).restoreUserFromDeleted) {
+                            (dbMock as any).restoreUserFromDeleted(userId, data.email);
                         }
+                        const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'admin', ...data } as any) || ({ id: userId, role: 'admin', ...data } as any);
+                        const idx = (dbMock.adminsData || []).findIndex(a => a.id === userId || (a as any).uid === userId || (a as any).firebaseUid === userId || (a.email && data.email && a.email.toLowerCase() === data.email.toLowerCase()));
+                        if (idx === -1) {
+                            dbMock.adminsData.push(normalizedData);
+                        } else {
+                            dbMock.adminsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.adminsData[idx], ...normalizedData } as any) || normalizedData;
+                        }
+                        eventEmitter.emit('user-updated', userId);
+                        eventEmitter.emit('user-update', normalizedData);
+                    } else if (change.type === 'removed') {
+                        dbMock.dbPurgeUserFromMemory(userId);
+                        if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
+                        eventEmitter.emit('user-deleted', userId);
                     }
-                    const normalizedData = dbMock.normalizeAnyUser({ id: userId, role: 'admin', ...data } as any) || ({ id: userId, role: 'admin', ...data } as any);
-                    const idx = (dbMock.adminsData || []).findIndex(a => a.id === userId || (a as any).uid === userId || (a as any).firebaseUid === userId || (a.email && data.email && a.email.toLowerCase() === data.email.toLowerCase()));
-                    if (idx === -1) {
-                        dbMock.adminsData.push(normalizedData);
-                    } else {
-                        dbMock.adminsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.adminsData[idx], ...normalizedData } as any) || normalizedData;
-                    }
-                    eventEmitter.emit('user-updated', userId);
-                    eventEmitter.emit('user-update', normalizedData);
-                } else if (change.type === 'removed') {
-                    dbMock.dbPurgeUserFromMemory(userId);
-                    if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
-                    eventEmitter.emit('user-deleted', userId);
-                }
-            });
-        }, (err) => handleSyncError('Firestore admins collection sync:', err));
+                });
+            }, (err: any) => handleSyncError('Firestore admins collection sync:', err));
+        }
 
         // 13. Student Payments sync
-        const studentPaymentsRef = collection(db, 'student_payments');
-        const studentPaymentsQuery = isStudentRole && currentAuth
-            ? query(studentPaymentsRef, where('studentId', '==', currentAuth.uid))
-            : studentPaymentsRef;
-        onSnapshot(studentPaymentsQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        let studentPaymentsQuery: any = null;
+        if (currentUserObj?.role === 'admin') {
+            studentPaymentsQuery = collection(db, 'student_payments');
+        }
+        if (studentPaymentsQuery) {
+            onSnapshot(studentPaymentsQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const payId = data.id || change.doc.id;
                 const idx = (dbMock.studentPaymentsData || []).findIndex(p => p.id === payId);
@@ -995,15 +1035,17 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('student-payments-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore student payments sync:', err));
+        }, (err: any) => handleSyncError('Firestore student payments sync:', err));
+        }
 
         // 14. Student Expenses sync
-        const studentExpensesRef = collection(db, 'student_expenses');
-        const studentExpensesQuery = isStudentRole && currentAuth
-            ? query(studentExpensesRef, where('studentId', '==', currentAuth.uid))
-            : studentExpensesRef;
-        onSnapshot(studentExpensesQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        let studentExpensesQuery: any = null;
+        if (currentUserObj?.role === 'admin') {
+            studentExpensesQuery = collection(db, 'student_expenses');
+        }
+        if (studentExpensesQuery) {
+            onSnapshot(studentExpensesQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const expId = data.id || change.doc.id;
                 const idx = (dbMock.studentExpensesData || []).findIndex(e => e.id === expId);
@@ -1016,12 +1058,19 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('student-expenses-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore student expenses sync:', err));
+        }, (err: any) => handleSyncError('Firestore student expenses sync:', err));
+        }
 
         // 15. Teacher Payments sync
-        const teacherPaymentsRef = collection(db, 'teacher_payments');
-        onSnapshot(teacherPaymentsRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        let teacherPaymentsQuery: any = null;
+        if (isTeacherRole && currentAuth) {
+            teacherPaymentsQuery = query(collection(db, 'teacher_payments'), where('teacherId', '==', currentAuth.uid));
+        } else if (currentUserObj?.role === 'admin') {
+            teacherPaymentsQuery = collection(db, 'teacher_payments');
+        }
+        if (teacherPaymentsQuery) {
+            onSnapshot(teacherPaymentsQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const payId = data.id || change.doc.id;
                 const idx = (dbMock.teacherPaymentsData || []).findIndex(p => p.id === payId);
@@ -1034,12 +1083,14 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('teacher-payments-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore teacher payments sync:', err));
+        }, (err: any) => handleSyncError('Firestore teacher payments sync:', err));
+        }
 
         // 16. Quizzes sync
-        const quizzesRef = collection(db, 'firestore_quizzes');
-        onSnapshot(quizzesRef, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const quizzesRef = collection(db, 'firestore_quizzes');
+            onSnapshot(quizzesRef, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const quizId = data.id || change.doc.id;
                 const idx = (dbMock.quizzesData || []).findIndex(q => q.id === quizId || q.videoId === data.videoId);
@@ -1052,7 +1103,8 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('quizzes-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore quizzes sync:', err));
+        }, (err: any) => handleSyncError('Firestore quizzes sync:', err));
+        }
 
         // 17. App Config sync
         const appConfigRef = doc(db, 'app_config', 'main');
@@ -1064,15 +1116,16 @@ export const initFirestoreSync = () => {
             } else if (dbMock.appConfigData) {
                 syncAppConfigToFirestore(dbMock.appConfigData);
             }
-        }, (err) => handleSyncError('Firestore app config sync:', err));
+        }, (err: any) => handleSyncError('Firestore app config sync:', err));
 
         // 18. Student Friends sync
-        const friendsRef = collection(db, 'student_friends');
-        const friendsQuery = isStudentRole && currentAuth
-            ? query(friendsRef, where('studentId', '==', currentAuth.uid))
-            : friendsRef;
-        onSnapshot(friendsQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const friendsRef = collection(db, 'student_friends');
+            const friendsQuery = isStudentRole && currentAuth
+                ? query(friendsRef, where('studentId', '==', currentAuth.uid))
+                : friendsRef;
+            onSnapshot(friendsQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 if (!data.studentId || !data.friendId) return;
                 const idx = (dbMock.studentFriendsData || []).findIndex(f => f.studentId === data.studentId && f.friendId === data.friendId);
@@ -1084,15 +1137,17 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('student-friends-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore student friends sync:', err));
+        }, (err: any) => handleSyncError('Firestore student friends sync:', err));
+        }
 
         // 19. AI Query Logs sync
-        const aiLogsRef = collection(db, 'ai_query_logs');
-        const aiLogsQuery = currentAuth && (!currentUserObj || currentUserObj.role !== 'admin')
-            ? query(aiLogsRef, where('userId', '==', currentAuth.uid))
-            : aiLogsRef;
-        onSnapshot(aiLogsQuery, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
+        if (currentUserObj?.role === 'admin') {
+            const aiLogsRef = collection(db, 'ai_query_logs');
+            const aiLogsQuery = currentAuth && (!currentUserObj || currentUserObj.role !== 'admin')
+                ? query(aiLogsRef, where('userId', '==', currentAuth.uid))
+                : aiLogsRef;
+            onSnapshot(aiLogsQuery, (snapshot: any) => {
+            snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const logId = data.id || change.doc.id;
                 const idx = (dbMock.aiQueryLogsData || []).findIndex(l => l.id === logId);
@@ -1105,17 +1160,20 @@ export const initFirestoreSync = () => {
                     eventEmitter.emit('ai-logs-updated');
                 }
             });
-        }, (err) => handleSyncError('Firestore ai logs sync:', err));
+        }, (err: any) => handleSyncError('Firestore ai logs sync:', err));
+        }
 
         // 20. User Seen States sync
-        const userSeenStatesRef = doc(db, 'firestore_user_seen_states', 'main');
-        onSnapshot(userSeenStatesRef, (docSnap) => {
+        if (currentUserObj?.role === 'admin') {
+            const userSeenStatesRef = doc(db, 'firestore_user_seen_states', 'main');
+            onSnapshot(userSeenStatesRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 Object.assign(dbMock.userSeenStates, data);
                 eventEmitter.emit('user-seen-states-updated', dbMock.userSeenStates);
             }
-        }, (err) => handleSyncError('Firestore user seen states sync:', err));
+        }, (err: any) => handleSyncError('Firestore user seen states sync:', err));
+        }
 
     } catch (error) {
         console.error('Error initializing Firestore Sync:', error);
@@ -1335,14 +1393,14 @@ export const syncCloseSupportConversationInFirestore = async (conversationId: st
         
         // 6. Deactivate any active voice call rooms, whiteboard sessions, and WebRTC signaling rooms
         const voicePromises: Promise<void>[] = targetIds.map(id =>
-            safeSetDoc(doc(db, 'voiceRooms', id), {
+            safeSetDoc(doc(db, 'voice_group_calls', id), {
                 active: false,
                 participants: [],
                 updatedAt: serverTimestamp()
             }, { merge: true }).catch(() => {})
         );
         const whiteboardPromises: Promise<void>[] = targetIds.map(id =>
-            safeSetDoc(doc(db, 'whiteboardMeta', id), {
+            safeSetDoc(doc(db, 'whiteboards', id), {
                 active: false,
                 updatedAt: serverTimestamp()
             }, { merge: true }).catch(() => {})
@@ -1509,7 +1567,7 @@ export const syncDeleteTopicRequestFromFirestore = async (requestId: string) => 
 export const syncSubmitStudentAnswerToFirestore = async (answer: any) => {
     try {
         const id = answer.id || `${answer.studentId}_${answer.videoId}_${Date.now()}`;
-        await safeSetDoc(doc(db, 'firestore_student_answers', id), {
+        await safeSetDoc(doc(db, 'quiz_answers', id), {
             ...answer,
             id,
             updatedAt: serverTimestamp()
@@ -1726,7 +1784,7 @@ export const syncStudentAnswersToFirestore = async () => {
         const items = dbMock.studentAnswersData || [];
         for (const item of items) {
             const id = (item as any).id || `${item.studentId}_${item.videoId}_${Date.now()}`;
-            await safeSetDoc(doc(db, 'firestore_student_answers', id), {
+            await safeSetDoc(doc(db, 'quiz_answers', id), {
                 ...item,
                 id,
                 updatedAt: serverTimestamp()

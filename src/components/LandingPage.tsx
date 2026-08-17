@@ -7,8 +7,7 @@ import { ROUTES } from '../constants/routes';
 import { useI18n } from '../hooks/useI18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AulaLogoClean from '../assets/images/aula_logo_clean_white_bg_1779378431610.png';
-import AulaLogoCleanNoBg from '../assets/images/aula_logo_clean_1779377396984.png';
+import AulaLogo from '../assets/images/aula-logo.png';
 
 const FeatureCard: React.FC<{ icon: React.ReactNode; title: string; description: string }> = React.memo(({ icon, title, description }) => (
     <div className="premium-card p-8 text-center hover:-translate-y-2 duration-300 h-full flex flex-col items-center">
@@ -69,13 +68,15 @@ export const LandingPage: React.FC = () => {
     return (
         <div className="bg-gray-50 dark:bg-slate-900 min-h-screen text-slate-900 dark:text-slate-50 overflow-x-hidden">
             {/* Header */}
-            <header className="container mx-auto px-6 py-4 flex flex-col sm:flex-row justify-center sm:justify-between items-center gap-4">
-                <div className="flex justify-center w-full sm:w-auto">
+            <header className="container mx-auto px-6 py-6 flex flex-col sm:flex-row justify-center sm:justify-between items-center gap-6 relative z-50">
+                <div className="flex justify-center w-full sm:w-auto min-h-[56px] min-w-[180px]">
                     <img 
-                        src={theme === 'dark' ? AulaLogoCleanNoBg : AulaLogoClean} 
+                        src={AulaLogo} 
                         alt="AulaInfinity Logo" 
-                        className="h-16 md:h-[120px] object-contain" 
+                        id="landing-header-logo"
+                        className="object-contain block opacity-100 visible bg-white p-2 rounded-xl shadow-sm w-[201.664px] h-[124px]" 
                         referrerPolicy="no-referrer"
+                        loading="eager"
                     />
                 </div>
                 <div className="flex items-center justify-center space-x-4 w-full sm:w-auto flex-wrap">
@@ -242,9 +243,9 @@ export const LandingPage: React.FC = () => {
             <footer className="bg-white dark:bg-slate-800 text-center py-8">
                  <div className="flex items-center justify-center mb-4">
                      <img 
-                         src={theme === 'dark' ? AulaLogoCleanNoBg : AulaLogoClean}
+                         src={AulaLogo}
                           alt="AulaInfinity Logo" 
-                         className="h-10 object-contain" 
+                         className="h-10 object-contain bg-white p-1 rounded-lg" 
                          referrerPolicy="no-referrer"
                      />
                 </div>

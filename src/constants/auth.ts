@@ -1,27 +1,22 @@
 /**
- * Variable de entorno con admins permitidos
- * Formato: email1,email2,email3 (separados por comas)
- * Fallback: ['8aulainfinity8@gmail.com']
- * 
- * Uso:
- * - Desarrollo: se usa el default
- * - Producción: configura en .env.production
+ * Configuración de autenticación y roles de administración.
+ * La autorización real de administración se basa estrictamente en Firebase Custom Claims (role === 'admin').
  */
-export const DEFAULT_ADMIN_EMAILS = ['8aulainfinity8@gmail.com'];
+export const DEFAULT_ADMIN_EMAILS: string[] = [];
 
 export const ADMIN_EMAILS = (
-    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ADMIN_EMAILS) || DEFAULT_ADMIN_EMAILS.join(',')
+    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ADMIN_EMAILS) || ''
 )
     .split(',')
+    .filter(Boolean)
     .map(email => email.trim().toLowerCase());
 
 /**
- * Verifica si un email pertenece a un administrador
- * @param email - Email a verificar (puede ser null/undefined)
- * @returns true si el email es admin, false en caso contrario
+ * Función de compatibilidad para UI.
+ * NOTA DE SEGURIDAD: La autorización real la determinan las Custom Claims verificadas en backend y Security Rules.
  */
 export const isAdminEmail = (email?: string | null): boolean => {
-    if (!email) return false;
+    if (!email || ADMIN_EMAILS.length === 0) return false;
     return ADMIN_EMAILS.includes(email.toLowerCase());
 };
 

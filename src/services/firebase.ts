@@ -1,9 +1,17 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore, enableNetwork, doc, getDocFromServer } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  enableNetwork, 
+  doc, 
+  getDocFromServer, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc 
+} from "firebase/firestore";
 import { getAuth, onAuthStateChanged, onIdTokenChanged } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
-import { isAdminEmail } from "../constants/auth";
 
 // Safe import for firebase-applet-config.json in case file is absent or re-created
 const metaGlob = (import.meta as unknown as { glob?: (pattern: string, opts?: { eager: boolean }) => Record<string, unknown> }).glob;
@@ -58,13 +66,11 @@ storage.maxOperationRetryTime = 20000;
 
 // --- Sistema de Logging exclusivo para Administradores ---
 export function checkIsAdminUser(): boolean {
-  const currentEmail = auth.currentUser?.email;
-  if (isAdminEmail(currentEmail)) return true;
   try {
     const localUser = localStorage.getItem('aulainfinity_user');
     if (localUser) {
       const parsed = JSON.parse(localUser);
-      if (parsed.role === 'admin' || isAdminEmail(parsed.email)) return true;
+      if (parsed.role === 'admin') return true;
     }
   } catch {
     // Ignorar errores de parseo

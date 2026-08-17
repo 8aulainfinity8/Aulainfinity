@@ -15,10 +15,8 @@ import { useI18n } from '../hooks/useI18n';
 import { useStudyStreak } from '../hooks/useStudyStreak';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AulaLogoClean from '../assets/images/aula_logo_clean_white_bg_1779378431610.png';
-import AulaLogoCleanNoBg from '../assets/images/aula_logo_clean_1779377396984.png';
-import AulaLogoIconOnly from '../assets/images/aula_logo_icon_white_bg_1779378455579.png';
-import AulaLogoIconNoBg from '../assets/images/aula_logo_icon_only_1779377375141.png';
+import AulaLogo from '../assets/images/aula-logo.png';
+import AulaLogoIcon from '../assets/images/aula-logo-icon.png';
 
 import { filterCoursesForTeacher } from '../utils/teacherPermissions';
 
@@ -219,20 +217,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ sidebarState, onItemClick }) =
                 <div className="flex items-center justify-center p-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0 overflow-hidden bg-white dark:bg-slate-800">
                     {isSidebarOpen ? (
                         <img 
-                            src={theme === 'dark' ? AulaLogoCleanNoBg : AulaLogoClean} 
+                            src={AulaLogo} 
                             alt="AulaInfinity Logo" 
-                            className="h-10 object-contain" 
+                            className="h-10 object-contain bg-white rounded-lg p-1" 
                             referrerPolicy="no-referrer"
                         />
                     ) : (
                         <img 
-                            src={theme === 'dark' ? AulaLogoIconNoBg : AulaLogoIconOnly} 
+                            src={AulaLogoIcon} 
                             alt="AulaInfinity Icon" 
-                            className={`w-8 h-8 rounded-full border shadow-sm animate-pulse object-contain p-1 transition-colors ${
-                                theme === 'dark' 
-                                    ? 'border-slate-700 bg-transparent' 
-                                    : 'border-indigo-150 bg-white'
-                            }`} 
+                            className="w-8 h-8 rounded-full border shadow-sm object-contain p-1 transition-colors border-indigo-150 bg-white" 
                             referrerPolicy="no-referrer"
                         />
                     )}

@@ -14,8 +14,8 @@ import { useI18n } from '../hooks/useI18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AulaLogoIconOnly from '../assets/images/aula_logo_icon_white_bg_1779378455579.png';
-import AulaLogoIconNoBg from '../assets/images/aula_logo_icon_only_1779377375141.png';
+import AulaLogo from '../assets/images/aula-logo.png';
+import AulaLogoIcon from '../assets/images/aula-logo-icon.png';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -125,19 +125,17 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, openSidebar, side
                         )}
                     </div>
                     
-                    {/* Mobile-only logo to anchor brand identity */}
-                    <Link to={user?.role === 'admin' ? ROUTES.ADMIN_DASHBOARD : ROUTES.DASHBOARD} aria-label="Ir al inicio de AulaInfinity" className="md:hidden flex items-center hover:opacity-90 active:scale-95 transition-all flex-shrink-0">
+                    {/* Logo to anchor brand identity (visible on all screens if sidebar is closed/collapsed) */}
+                    <Link to={user?.role === 'admin' ? ROUTES.ADMIN_DASHBOARD : ROUTES.DASHBOARD} aria-label="Ir al inicio de AulaInfinity" className="flex items-center hover:opacity-90 active:scale-95 transition-all flex-shrink-0 min-w-[32px] min-h-[32px]">
                         <img 
-                            src={theme === 'dark' ? AulaLogoIconNoBg : AulaLogoIconOnly} 
+                            src={AulaLogoIcon} 
                             alt="AulaInfinity Logo" 
-                            className={`h-7 w-7 sm:h-8 sm:w-8 object-contain rounded-lg shadow-sm transition-colors ${
-                                theme === 'dark' 
-                                    ? 'bg-transparent' 
-                                    : 'bg-white'
-                            }`}
+                            width="32"
+                            height="32"
+                            className="h-8 w-8 sm:h-9 sm:w-9 block object-contain transition-colors bg-white rounded-lg shadow-sm"
                             referrerPolicy="no-referrer"
                         />
-                        <span className="ml-1.5 font-black text-[#0f2a4a] dark:text-white text-xs sm:text-sm tracking-tight font-sans hidden sm:inline-block">AulaInfinity</span>
+                        <span className="ml-2 font-black text-[#0f2a4a] dark:text-white text-sm sm:text-base tracking-tight font-sans hidden sm:inline-block">AulaInfinity</span>
                     </Link>
 
                     {isFetching > 0 && (

@@ -14,7 +14,7 @@ if (!getApps().length) {
   }
 }
 
-// authenticateUser Middleware
+// authenticateUser Middleware - Authoritative Custom Claims Verification
 export const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -25,8 +25,7 @@ export const authenticateUser = async (req: express.Request, res: express.Respon
   
   try {
     const decodedToken = await getAuth().verifyIdToken(token);
-    const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
-    decodedToken.role = isMasterAdmin ? 'admin' : (decodedToken.role || 'student');
+    decodedToken.role = decodedToken.role || 'student';
     (req as any).user = decodedToken;
     next();
   } catch (error) {
@@ -35,7 +34,16 @@ export const authenticateUser = async (req: express.Request, res: express.Respon
   }
 };
 
-// requireRole Middleware
+// requireVerifiedUser Middleware
+export const requireVerifiedUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const user = (req as any).user;
+  if (!user || !user.email_verified) {
+    return res.status(403).json({ error: 'Forbidden: Correo electrónico no verificado. Por favor verifica tu email.' });
+  }
+  next();
+};
+
+// requireRole Middleware - Strict Custom Claims Authorization (No Email Bypass)
 export const requireRole = (allowedRoles: string[]) => {
   return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
@@ -47,14 +55,12 @@ export const requireRole = (allowedRoles: string[]) => {
     
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
-      const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
-      const role = isMasterAdmin ? 'admin' : (decodedToken.role || 'student');
+      const role = decodedToken.role || 'student';
       
       if (!allowedRoles.includes(role)) {
         return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
       }
       
-      // Inject decoded user to req
       decodedToken.role = role;
       (req as any).user = decodedToken;
       next();
@@ -134,9 +140,12 @@ async function startServer() {
         return;
       }
       const decodedToken = await getAuth().verifyIdToken(token);
-      const isMasterAdmin = decodedToken.email && decodedToken.email.toLowerCase() === '8aulainfinity8@gmail.com';
+      if (!decodedToken.email_verified) {
+        ws.close(1008, "Email verification required");
+        return;
+      }
       userId = decodedToken.uid;
-      isTeacher = isMasterAdmin || decodedToken.role === "teacher" || decodedToken.role === "admin";
+      isTeacher = decodedToken.role === "teacher" || decodedToken.role === "admin";
     } catch (err) {
       console.error("WebSocket auth error:", err);
       ws.close(1008, "Invalid token");

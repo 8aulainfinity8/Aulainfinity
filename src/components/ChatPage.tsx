@@ -151,7 +151,7 @@ export const ChatPage: React.FC = () => {
         const unsubs: (() => void)[] = [];
 
         roomIdsToCheck.forEach(rId => {
-            const voiceRef = doc(db, 'voiceRooms', rId);
+            const voiceRef = doc(db, 'voice_group_calls', rId);
             const voiceUnsub = onSnapshot(voiceRef, (snap) => {
                 const data = snap.exists() ? snap.data() : null;
                 const participants = data?.participants || [];
@@ -159,11 +159,11 @@ export const ChatPage: React.FC = () => {
                 setIsVoiceCallActive(Object.values(activeVoiceMap).some(Boolean));
             });
 
-            const boardRef = doc(db, 'whiteboardMeta', rId);
+            const boardRef = doc(db, 'whiteboards', rId);
             const boardUnsub = onSnapshot(boardRef, (snap) => {
                 activeBoardMap[rId] = snap.exists() && snap.data()?.active === true;
                 setIsWhiteboardActive(Object.values(activeBoardMap).some(Boolean));
-            });
+            }, () => {});
 
             unsubs.push(voiceUnsub, boardUnsub);
         });

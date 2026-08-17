@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { isAdminEmail } from '../constants/auth';
 
 /**
  * Suite de Pruebas de Matriz de Seguridad y Autorización (Fase 13 del Roadmap)
- * Valida los permisos de acceso por rol (Student, Teacher, Admin)
+ * Valida los permisos de acceso por rol (Student, Teacher, Admin) basado estrictamente en Claims
  */
 describe('Fase 13 — Matriz de Seguridad y Autorización', () => {
 
@@ -28,32 +27,32 @@ describe('Fase 13 — Matriz de Seguridad y Autorización', () => {
 
     const adminCtx: SecurityContext = {
         uid: 'admin_789',
-        email: '8aulainfinity8@gmail.com',
+        email: 'admin@aulainfinity.com',
         role: 'admin',
         isMasterAdmin: true
     };
 
     // Helper de lógica de autorización
     const canModifyRole = (ctx: SecurityContext, targetUserId: string, newRole: string) => {
-        if (ctx.role === 'admin' || isAdminEmail(ctx.email)) return true;
+        if (ctx.role === 'admin') return true;
         return false; // Ni student ni teacher pueden auto-promocionarse o cambiar roles
     };
 
     const canReadPrivateStudentData = (ctx: SecurityContext, targetStudentId: string, assignedTeacherId?: string) => {
-        if (ctx.role === 'admin' || isAdminEmail(ctx.email)) return true;
+        if (ctx.role === 'admin') return true;
         if (ctx.uid === targetStudentId) return true;
         if (ctx.role === 'teacher' && assignedTeacherId === ctx.uid) return true;
         return false;
     };
 
     const canModifyStudentProgress = (ctx: SecurityContext, targetStudentId: string) => {
-        if (ctx.role === 'admin' || isAdminEmail(ctx.email)) return true;
+        if (ctx.role === 'admin') return true;
         if (ctx.uid === targetStudentId) return true; // El propio alumno registra su avance en lecciones
         return false;
     };
 
     const canManageGlobalTutoring = (ctx: SecurityContext) => {
-        return ctx.role === 'admin' || isAdminEmail(ctx.email);
+        return ctx.role === 'admin';
     };
 
     const canDirectWriteFinancialTransactions = (isClientSideDirectWrite: boolean) => {

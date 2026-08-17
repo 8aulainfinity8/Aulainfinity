@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { db, auth } from '../services/firebase';
 import { syncAllUsersToFirestore } from '../services/firestoreSync';
 import { Database, RefreshCw, CheckCircle2, UserCheck, Layers, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,7 +22,7 @@ export const FirestoreTestViewer: React.FC = () => {
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!isOpen || user?.role !== 'admin') return;
+        if (!isOpen || user?.role !== 'admin' || !auth.currentUser?.emailVerified) return;
         setLoading(true);
 
         const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -54,7 +54,7 @@ export const FirestoreTestViewer: React.FC = () => {
             setTopicsList(docs);
         }, (err) => console.error("Error fetching topics from Firestore:", err));
 
-        const unsubscribeAnswers = onSnapshot(collection(db, 'firestore_student_answers'), (snapshot) => {
+        const unsubscribeAnswers = onSnapshot(collection(db, 'quiz_answers'), (snapshot) => {
             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setAnswersList(docs);
         }, (err) => console.error("Error fetching answers from Firestore:", err));
@@ -328,7 +328,7 @@ export const FirestoreTestViewer: React.FC = () => {
                         ) : activeTab === 'answers' ? (
                             answersList.length === 0 ? (
                                 <div className="py-8 text-center text-slate-400">
-                                    No hay cuestionarios guardados en `firestore_student_answers`.
+                                    No hay cuestionarios guardados en `quiz_answers`.
                                 </div>
                             ) : (
                                 answersList.map((ans) => (

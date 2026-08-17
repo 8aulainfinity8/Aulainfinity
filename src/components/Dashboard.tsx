@@ -1471,32 +1471,23 @@ export const StudentDashboard: React.FC = () => {
     const queryClient = useQueryClient();
 
     React.useEffect(() => {
-        const handleSync = () => {
-            queryClient.invalidateQueries({ queryKey: ['courses'] });
-            queryClient.invalidateQueries({ queryKey: ['agendaEvents'] });
-            queryClient.invalidateQueries({ queryKey: ['studentAnswers'] });
-            queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-        };
+        const handleCourses = () => queryClient.invalidateQueries({ queryKey: ['courses'] });
+        const handleAgenda = () => queryClient.invalidateQueries({ queryKey: ['agendaEvents'] });
+        const handleAnswers = () => queryClient.invalidateQueries({ queryKey: ['studentAnswers'] });
+        const handleTutoring = () => queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
 
-        eventEmitter.on('courses-updated', handleSync);
-        eventEmitter.on('agenda-updated', handleSync);
-        eventEmitter.on('student-answers-updated', handleSync);
-        eventEmitter.on('tutoring-requests-updated', handleSync);
-        eventEmitter.on('tutoring-update', handleSync);
-        eventEmitter.on('user-update', handleSync);
-        eventEmitter.on('user-updated', handleSync);
-        eventEmitter.on('infinity-transactions-updated', handleSync);
+        eventEmitter.on('courses-updated', handleCourses);
+        eventEmitter.on('agenda-updated', handleAgenda);
+        eventEmitter.on('student-answers-updated', handleAnswers);
+        eventEmitter.on('tutoring-requests-updated', handleTutoring);
+        eventEmitter.on('tutoring-update', handleTutoring);
 
         return () => {
-            eventEmitter.off('courses-updated', handleSync);
-            eventEmitter.off('agenda-updated', handleSync);
-            eventEmitter.off('student-answers-updated', handleSync);
-            eventEmitter.off('tutoring-requests-updated', handleSync);
-            eventEmitter.off('tutoring-update', handleSync);
-            eventEmitter.off('user-update', handleSync);
-            eventEmitter.off('user-updated', handleSync);
-            eventEmitter.off('infinity-transactions-updated', handleSync);
+            eventEmitter.off('courses-updated', handleCourses);
+            eventEmitter.off('agenda-updated', handleAgenda);
+            eventEmitter.off('student-answers-updated', handleAnswers);
+            eventEmitter.off('tutoring-requests-updated', handleTutoring);
+            eventEmitter.off('tutoring-update', handleTutoring);
         };
     }, [queryClient]);
 

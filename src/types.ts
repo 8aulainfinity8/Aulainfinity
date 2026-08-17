@@ -4,11 +4,16 @@ import type { FC, SVGProps } from 'react';
 
 export interface StudentUser {
   id: string;
+  uid?: string;
+  firebaseUid?: string;
   name: string;
   email: string;
   role: 'student';
   watchedVideos: string[];
   favoriteVideos?: string[];
+  completedVideoIds?: string[];
+  unlockedRewardIds?: string[];
+  unlockedBadgeIds?: string[];
   password?: string; // Should not be sent to client, but here for mock data
   isSubscribed: boolean;
   registrationDate: string; // ISO string
@@ -28,6 +33,8 @@ export interface StudentUser {
 
 export interface AdminUser {
   id:string;
+  uid?: string;
+  firebaseUid?: string;
   username: string;
   role: 'admin';
   password?: string;
@@ -38,6 +45,8 @@ export interface AdminUser {
 
 export interface TeacherUser {
   id: string;
+  uid?: string;
+  firebaseUid?: string;
   name: string;
   email: string;
   role: 'teacher';

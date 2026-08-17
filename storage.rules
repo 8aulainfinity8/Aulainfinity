@@ -3,9 +3,13 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     
-    // Funciones auxiliares de autenticación y roles
+    // Auxiliary auth & role functions
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
     }
 
     function isOwner(userId) {
@@ -13,88 +17,144 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.role == 'admin') ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == '8aulainfinity8@gmail.com')
-      );
+      return isVerifiedUser() && request.auth.token.role == 'admin';
     }
 
     function isTeacher() {
-      return isSignedIn() && (
-        (request.auth.token.role == 'teacher') ||
-        isAdmin()
+      return isVerifiedUser() && (
+        request.auth.token.role == 'teacher' ||
+        request.auth.token.role == 'admin'
       );
     }
 
-    // Validación de tamaño máximo de archivo (en MB)
+    function isApprovedTeacher() {
+      return isVerifiedUser() && (
+        request.auth.token.role == 'admin' ||
+        (request.auth.token.role == 'teacher' && request.auth.token.isApprovedForTutoring == true)
+      );
+    }
+
+    // Maximum file size validation (in MB)
     function maxFileSize(maxSizeMB) {
       return request.resource.size < maxSizeMB * 1024 * 1024;
     }
 
-    // 1. Fotos de Perfil (Avatares)
-    // Lectura pública/autenticada para mostrar avatares en chats y comentarios.
-    // Escritura restringida estrictamente al usuario dueño del perfil (máx 5MB).
+    // 1. Profile Pictures (Avatars)
     match /avatars/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() 
+      allow read: if isVerifiedUser();
+      allow write: if isVerifiedUser() 
                    && (fileName.matches('^' + request.auth.uid + '_.*') || fileName == request.auth.uid)
                    && maxFileSize(5);
     }
 
-    // 2. Archivos y Carpetas Personales de Usuario (/users/{userId}/...)
-    // Acceso y edición exclusivos del usuario propietario o administradores.
+    // 2. Personal Files (/users/{userId}/...)
     match /users/{userId}/{allPaths=**} {
-      allow read: if isOwner(userId) || isTeacher();
-      allow write: if (isOwner(userId) || isAdmin()) && maxFileSize(25);
+      allow read: if isVerifiedUser() && (isOwner(userId) || isApprovedTeacher());
+      allow write: if isVerifiedUser() && (isOwner(userId) || isAdmin()) && maxFileSize(25);
     }
 
-    // 3. Apuntes y Documentos Privados del Estudiante (/notes/{userId}/...)
-    // Aislamiento completo por ID de estudiante (máx 15MB).
+    // 3. Student Private Notes (/notes/{userId}/...)
     match /notes/{userId}/{fileName} {
-      allow read: if isOwner(userId) || isTeacher();
-      allow write: if (isOwner(userId) || isAdmin()) && maxFileSize(15);
+      allow read: if isVerifiedUser() && (isOwner(userId) || isApprovedTeacher());
+      allow write: if isVerifiedUser() && (isOwner(userId) || isAdmin()) && maxFileSize(15);
     }
 
-    // 4. Adjuntos de Chat y Tutorías (/chat_attachments/{conversationId}/...)
-    // Lectura y subida de archivos para usuarios autenticados (máx 20MB).
+    // 4. Chat Attachments (/chat_attachments/{conversationId}/...)
     match /chat_attachments/{conversationId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && maxFileSize(20);
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        conversationId == request.auth.uid ||
+        conversationId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
+        conversationId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
+        conversationId.matches('^' + request.auth.uid + '_.*') ||
+        conversationId.matches('.*_' + request.auth.uid + '$') ||
+        conversationId.matches('.*_' + request.auth.uid + '_.*') ||
+        (!conversationId.matches('.*_[a-zA-Z0-9]+.*') && !conversationId.matches('^direct_.*') && !conversationId.matches('^peer_.*'))
+      );
+      allow write: if isVerifiedUser() && maxFileSize(20) && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        conversationId == request.auth.uid ||
+        conversationId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
+        conversationId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
+        conversationId.matches('^' + request.auth.uid + '_.*') ||
+        conversationId.matches('.*_' + request.auth.uid + '$') ||
+        conversationId.matches('.*_' + request.auth.uid + '_.*') ||
+        (!conversationId.matches('.*_[a-zA-Z0-9]+.*') && !conversationId.matches('^direct_.*') && !conversationId.matches('^peer_.*'))
+      );
     }
 
-    // 5. Materiales Educativos de Cursos (/course_materials/{courseId}/...)
-    // Lectura para estudiantes y carga restringida a docentes/administradores (máx 50MB).
+    // 5. Course Materials (/course_materials/{courseId}/...)
     match /course_materials/{courseId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isTeacher() && maxFileSize(50);
+      allow read: if isVerifiedUser();
+      allow write: if isApprovedTeacher() && maxFileSize(50);
     }
 
-    // 6. Vídeos de Cursos y Grabaciones de Clases (/videos/ y /recordings/)
-    // Lectura para usuarios autenticados; subida restringida a docentes y admins.
+    // 6. Course Videos & Class Recordings (/videos/ and /recordings/)
     match /videos/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow write: if isTeacher() && maxFileSize(500);
+      allow read: if isVerifiedUser();
+      allow write: if isApprovedTeacher() && maxFileSize(500);
     }
 
-    match /recordings/{allPaths=**} {
-      allow read: if isSignedIn();
-      allow write: if isTeacher() && maxFileSize(500);
+    match /recordings/{courseOrUserId}/{fileName} {
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        courseOrUserId == request.auth.uid ||
+        courseOrUserId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
+        courseOrUserId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
+        courseOrUserId.matches('^' + request.auth.uid + '_.*') ||
+        courseOrUserId.matches('.*_' + request.auth.uid + '$') ||
+        courseOrUserId.matches('.*_' + request.auth.uid + '_.*') ||
+        (!courseOrUserId.matches('.*_[a-zA-Z0-9]+.*') && !courseOrUserId.matches('^direct_.*') && !courseOrUserId.matches('^peer_.*'))
+      );
+      allow write: if isApprovedTeacher() && maxFileSize(500);
     }
 
-    // 7. Comprobantes de Pago y Justificantes (/receipts/{fileName})
-    // Lectura restringida al propio usuario y administradores.
+    match /recordings/{fileName} {
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        fileName.matches('^' + request.auth.uid + '_.*') ||
+        fileName.matches('.*_' + request.auth.uid + '.*')
+      );
+      allow write: if isApprovedTeacher() && maxFileSize(500);
+    }
+
+    // 7. Receipts (/receipts/{fileName})
     match /receipts/{fileName} {
-      allow read: if isAdmin() || (isSignedIn() && fileName.matches('^' + request.auth.uid + '_.*'));
-      allow write: if isSignedIn() && (fileName.matches('^' + request.auth.uid + '_.*') || isAdmin()) && maxFileSize(10);
+      allow read: if isAdmin() || (isVerifiedUser() && fileName.matches('^' + request.auth.uid + '_.*'));
+      allow write: if isVerifiedUser() && (fileName.matches('^' + request.auth.uid + '_.*') || isAdmin()) && maxFileSize(10);
     }
 
-    // 8. Adjuntos Generales (/attachments/{fileName})
+    // 8. Structured Attachments by User (/attachments/{userId}/{fileName})
+    match /attachments/{userId}/{fileName} {
+      allow read: if isVerifiedUser() && (isOwner(userId) || isApprovedTeacher() || isAdmin());
+      allow write: if isVerifiedUser() && (isOwner(userId) || isApprovedTeacher() || isAdmin()) && maxFileSize(25);
+    }
+
+    // 9. General Attachments with User UID Isolation (/attachments/{fileName})
     match /attachments/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && maxFileSize(25);
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        fileName.matches('^' + request.auth.uid + '_.*') ||
+        fileName.matches('.*_' + request.auth.uid + '_.*') ||
+        fileName.matches('.*_' + request.auth.uid + '\\..*') ||
+        fileName.matches('.*_' + request.auth.uid + '$')
+      );
+      allow write: if isVerifiedUser() && maxFileSize(25) && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        fileName.matches('^' + request.auth.uid + '_.*') ||
+        fileName.matches('.*_' + request.auth.uid + '_.*') ||
+        fileName.matches('.*_' + request.auth.uid + '\\..*') ||
+        fileName.matches('.*_' + request.auth.uid + '$')
+      );
     }
 
-    // Bloqueo por defecto para cualquier otra ruta no especificada
+    // Default deny fallback
     match /{allPaths=**} {
       allow read: if isAdmin();
       allow write: if false;

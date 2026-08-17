@@ -237,7 +237,7 @@ export const StudentChatPage: React.FC = () => {
     // Auto-listen to whiteboard and voice call rooms for active chat
     useEffect(() => {
         if (activeConvoId) {
-            const boardMetaRef = doc(db, 'whiteboardMeta', activeConvoId);
+            const boardMetaRef = doc(db, 'whiteboards', activeConvoId);
             const unsubBoard = onSnapshot(boardMetaRef, (snapshot) => {
                 const isActive = snapshot.exists() && snapshot.data()?.active === true;
                 setIsWhiteboardActive(isActive);
@@ -249,13 +249,16 @@ export const StudentChatPage: React.FC = () => {
                 }
             });
 
-            const voiceRef = doc(db, 'voiceRooms', activeConvoId);
-            const unsubVoice = onSnapshot(voiceRef, (snapshot) => {
-                const data = snapshot.exists() ? snapshot.data() : null;
-                const participants = data?.participants || [];
-                const isActive = data?.active === true && Array.isArray(participants) && participants.length > 0;
-                setIsVoiceCallActive(isActive);
-            });
+            let unsubVoice = () => {};
+            if (activeConvoId.includes(studentId)) {
+                const voiceRef = doc(db, 'voice_group_calls', activeConvoId);
+                unsubVoice = onSnapshot(voiceRef, (snapshot) => {
+                    const data = snapshot.exists() ? snapshot.data() : null;
+                    const participants = data?.participants || [];
+                    const isActive = data?.active === true && Array.isArray(participants) && participants.length > 0;
+                    setIsVoiceCallActive(isActive);
+                }, () => {});
+            }
 
             return () => {
                 unsubBoard();
@@ -389,49 +392,50 @@ export const StudentChatPage: React.FC = () => {
         return false;
     }, [studentId, user, groupConversations, conversations]);
 
-    // Global listener for active whiteboards across all channels
+    // Listen for active whiteboards for the specific courses the student is enrolled in
     useEffect(() => {
-        const q = collection(db, 'whiteboardMeta');
-        let initialLoadDone = false;
-        const unsub = onSnapshot(q, (snapshot) => {
-            const map: Record<string, { active: boolean; updatedBy?: string; updatedAt?: string }> = {};
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                if (data.active === true) {
-                    map[docSnap.id] = {
-                        active: true,
-                        updatedBy: data.updatedBy,
-                        updatedAt: data.updatedAt
-                    };
-                }
-            });
+        if (!user || user.role !== 'student' || !(user as any).enrolledCourseIds) return;
 
-            if (initialLoadDone) {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added' || change.type === 'modified') {
-                        const data = change.doc.data();
-                        if (data.active === true) {
-                            const boardConvoId = change.doc.id;
-                            if (isConvoForUser(boardConvoId)) {
-                                setGlobalToastNotice({
-                                    id: `${boardConvoId}_${Date.now()}`,
-                                    title: `¡El profesor ha iniciado la Pizarra Digital en vivo!`,
-                                    convoId: boardConvoId
-                                });
-                            }
+        let unsubs: (() => void)[] = [];
+        let map: Record<string, { active: boolean; updatedBy?: string; updatedAt?: string }> = {};
+        
+        (user as any).enrolledCourseIds.forEach((courseId: string) => {
+            const docRef = doc(db, 'whiteboards', courseId);
+            const unsub = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.active === true) {
+                        map[docSnap.id] = {
+                            active: true,
+                            updatedBy: data.updatedBy,
+                            updatedAt: data.updatedAt
+                        };
+                        
+                        // Show toast notice if it's new
+                        if (isConvoForUser(docSnap.id)) {
+                            // In a real app we'd track if we already showed it, but this is simplified
+                            // We can rely on RealtimeAlertsBanner to show the actual toast, 
+                            // this map is mostly for the UI badges
                         }
+                    } else {
+                        delete map[docSnap.id];
                     }
-                });
-            } else {
-                initialLoadDone = true;
-            }
-
-            setActiveWhiteboards(map);
-        }, (err) => {
-            console.error("Error subscribing to whiteboardMeta:", err);
+                } else {
+                    delete map[docSnap.id];
+                }
+                setActiveWhiteboards({ ...map });
+            }, (err) => {
+                console.warn("Error subscribing to specific whiteboard:", err.message);
+            });
+            unsubs.push(unsub);
         });
-        return () => unsub();
-    }, [isConvoForUser]);
+        
+        // Admins use a separate global listener in AdminChatPage, no need here since this is StudentChatPage
+
+        return () => {
+            unsubs.forEach(u => u());
+        };
+    }, [user, isConvoForUser]);
 
     // --- MUTATIONS ---
     // Add friend

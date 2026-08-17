@@ -6,7 +6,7 @@ export const adminUserData: AdminUser[] = [
         username: 'admin',
         role: 'admin',
         password: 'password0987',
-        email: '8aulainfinity8@gmail.com',
+        email: 'admin@aulainfinity.edu',
         name: 'Administrador',
     },
 ];

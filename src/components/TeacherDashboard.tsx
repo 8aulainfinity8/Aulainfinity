@@ -219,39 +219,46 @@ export const TeacherDashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        const handleSync = () => {
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-            queryClient.invalidateQueries({ queryKey: ['teachers'] });
-            queryClient.invalidateQueries({ queryKey: ['courses'] });
-            queryClient.invalidateQueries({ queryKey: ['allStudentAnswers'] });
-            queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
-            queryClient.invalidateQueries({ queryKey: ['topicRequests'] });
+        let userTimer: any = null;
+        const handleUsers = () => {
+            if (userTimer) clearTimeout(userTimer);
+            userTimer = setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['users'] });
+                queryClient.invalidateQueries({ queryKey: ['teachers'] });
+            }, 400);
+        };
+        const handleCourses = () => queryClient.invalidateQueries({ queryKey: ['courses'] });
+        const handleAnswers = () => queryClient.invalidateQueries({ queryKey: ['allStudentAnswers'] });
+        const handleTutoring = () => queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
+        const handleRequests = () => queryClient.invalidateQueries({ queryKey: ['topicRequests'] });
+        const handleQuizzes = () => {
             queryClient.invalidateQueries({ queryKey: ['quiz'] });
             queryClient.invalidateQueries({ queryKey: ['quizzes'] });
         };
 
-        eventEmitter.on('user-update', handleSync);
-        eventEmitter.on('user-updated', handleSync);
-        eventEmitter.on('user-deleted', handleSync);
-        eventEmitter.on('courses-updated', handleSync);
-        eventEmitter.on('student-answers-updated', handleSync);
-        eventEmitter.on('tutoring-requests-updated', handleSync);
-        eventEmitter.on('tutoring-update', handleSync);
-        eventEmitter.on('request-update', handleSync);
-        eventEmitter.on('request-deleted', handleSync);
-        eventEmitter.on('quizzes-updated', handleSync);
+        eventEmitter.on('user-update', handleUsers);
+        eventEmitter.on('user-updated', handleUsers);
+        eventEmitter.on('user-deleted', handleUsers);
+        eventEmitter.on('courses-updated', handleCourses);
+        eventEmitter.on('student-answers-updated', handleAnswers);
+        eventEmitter.on('tutoring-requests-updated', handleTutoring);
+        eventEmitter.on('tutoring-update', handleTutoring);
+        eventEmitter.on('request-update', handleRequests);
+        eventEmitter.on('request-deleted', handleRequests);
+        eventEmitter.on('quizzes-updated', handleQuizzes);
 
         return () => {
-            eventEmitter.off('user-update', handleSync);
-            eventEmitter.off('user-updated', handleSync);
-            eventEmitter.off('user-deleted', handleSync);
-            eventEmitter.off('courses-updated', handleSync);
-            eventEmitter.off('student-answers-updated', handleSync);
-            eventEmitter.off('tutoring-requests-updated', handleSync);
-            eventEmitter.off('tutoring-update', handleSync);
-            eventEmitter.off('request-update', handleSync);
-            eventEmitter.off('request-deleted', handleSync);
-            eventEmitter.off('quizzes-updated', handleSync);
+            if (userTimer) clearTimeout(userTimer);
+            eventEmitter.off('user-update', handleUsers);
+            eventEmitter.off('user-updated', handleUsers);
+            eventEmitter.off('user-deleted', handleUsers);
+            eventEmitter.off('courses-updated', handleCourses);
+            eventEmitter.off('student-answers-updated', handleAnswers);
+            eventEmitter.off('tutoring-requests-updated', handleTutoring);
+            eventEmitter.off('tutoring-update', handleTutoring);
+            eventEmitter.off('request-update', handleRequests);
+            eventEmitter.off('request-deleted', handleRequests);
+            eventEmitter.off('quizzes-updated', handleQuizzes);
         };
     }, [queryClient]);
 

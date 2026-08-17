@@ -125,10 +125,8 @@ export const AppLayout: React.FC = () => {
         return <Navigate to={ROUTES.ADMIN_ROOT} replace />;
     }
 
-    if (user.role === 'teacher' && auth && auth.currentUser) {
-        if (auth.currentUser.email?.toLowerCase() === user.email?.toLowerCase() && !auth.currentUser.emailVerified) {
-            return <Navigate to={ROUTES.LOGIN} replace />;
-        }
+    if (auth && auth.currentUser && auth.currentUser.email?.toLowerCase() === user.email?.toLowerCase() && !auth.currentUser.emailVerified) {
+        return <Navigate to={ROUTES.LOGIN} replace />;
     }
 
     return (

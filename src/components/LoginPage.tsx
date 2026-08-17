@@ -17,8 +17,7 @@ import { useI18n } from '../hooks/useI18n';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import AulaLogoClean from '../assets/images/aula_logo_clean_white_bg_1779378431610.png';
-import AulaLogoCleanNoBg from '../assets/images/aula_logo_clean_1779377396984.png';
+import AulaLogo from '../assets/images/aula-logo.png';
 
 export const LoginPage: React.FC = () => {
     const { t } = useI18n();
@@ -290,12 +289,13 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="w-full max-w-4xl mx-auto pt-8 sm:pt-0">
-                <Link to={ROUTES.LANDING} className="flex items-center justify-center mb-6 hover:opacity-90 transition-opacity">
+                <Link to={ROUTES.LANDING} className="flex items-center justify-center mb-8 hover:opacity-90 transition-opacity relative z-10 min-h-[60px]">
                     <img 
-                        src={theme === 'dark' ? AulaLogoCleanNoBg : AulaLogoClean} 
+                        src={AulaLogo} 
                         alt="AulaInfinity Logo" 
-                        className="h-14 md:h-16 object-contain" 
+                        className="h-14 md:h-16 w-auto object-contain block bg-white p-2 rounded-xl shadow-md" 
                         referrerPolicy="no-referrer"
+                        loading="eager"
                     />
                 </Link>
 

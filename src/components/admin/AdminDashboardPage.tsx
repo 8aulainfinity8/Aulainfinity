@@ -371,40 +371,45 @@ export const AdminDashboardPage: React.FC = () => {
     const queryClient = useQueryClient();
 
     useEffect(() => {
-        const handleSync = () => {
-            queryClient.invalidateQueries({ queryKey: ['users'] });
-            queryClient.invalidateQueries({ queryKey: ['teachers'] });
-            queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
-            queryClient.invalidateQueries({ queryKey: ['courses'] });
-            queryClient.invalidateQueries({ queryKey: ['allStudentAnswers'] });
-            queryClient.invalidateQueries({ queryKey: ['aiQueries'] });
-            queryClient.invalidateQueries({ queryKey: ['topicRequests'] });
+        let userTimer: any = null;
+        const handleUsers = () => {
+            if (userTimer) clearTimeout(userTimer);
+            userTimer = setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['users'] });
+                queryClient.invalidateQueries({ queryKey: ['teachers'] });
+            }, 400);
         };
+        const handleCourses = () => queryClient.invalidateQueries({ queryKey: ['courses'] });
+        const handleAnswers = () => queryClient.invalidateQueries({ queryKey: ['allStudentAnswers'] });
+        const handleTutoring = () => queryClient.invalidateQueries({ queryKey: ['tutoringRequests'] });
+        const handleAiLogs = () => queryClient.invalidateQueries({ queryKey: ['aiQueries'] });
+        const handleRequests = () => queryClient.invalidateQueries({ queryKey: ['topicRequests'] });
 
-        eventEmitter.on('user-update', handleSync);
-        eventEmitter.on('user-updated', handleSync);
-        eventEmitter.on('user-deleted', handleSync);
-        eventEmitter.on('courses-updated', handleSync);
-        eventEmitter.on('student-answers-updated', handleSync);
-        eventEmitter.on('tutoring-requests-updated', handleSync);
-        eventEmitter.on('tutoring-update', handleSync);
-        eventEmitter.on('tutoring-deleted', handleSync);
-        eventEmitter.on('ai-logs-updated', handleSync);
-        eventEmitter.on('request-update', handleSync);
-        eventEmitter.on('request-deleted', handleSync);
+        eventEmitter.on('user-update', handleUsers);
+        eventEmitter.on('user-updated', handleUsers);
+        eventEmitter.on('user-deleted', handleUsers);
+        eventEmitter.on('courses-updated', handleCourses);
+        eventEmitter.on('student-answers-updated', handleAnswers);
+        eventEmitter.on('tutoring-requests-updated', handleTutoring);
+        eventEmitter.on('tutoring-update', handleTutoring);
+        eventEmitter.on('tutoring-deleted', handleTutoring);
+        eventEmitter.on('ai-logs-updated', handleAiLogs);
+        eventEmitter.on('request-update', handleRequests);
+        eventEmitter.on('request-deleted', handleRequests);
 
         return () => {
-            eventEmitter.off('user-update', handleSync);
-            eventEmitter.off('user-updated', handleSync);
-            eventEmitter.off('user-deleted', handleSync);
-            eventEmitter.off('courses-updated', handleSync);
-            eventEmitter.off('student-answers-updated', handleSync);
-            eventEmitter.off('tutoring-requests-updated', handleSync);
-            eventEmitter.off('tutoring-update', handleSync);
-            eventEmitter.off('tutoring-deleted', handleSync);
-            eventEmitter.off('ai-logs-updated', handleSync);
-            eventEmitter.off('request-update', handleSync);
-            eventEmitter.off('request-deleted', handleSync);
+            if (userTimer) clearTimeout(userTimer);
+            eventEmitter.off('user-update', handleUsers);
+            eventEmitter.off('user-updated', handleUsers);
+            eventEmitter.off('user-deleted', handleUsers);
+            eventEmitter.off('courses-updated', handleCourses);
+            eventEmitter.off('student-answers-updated', handleAnswers);
+            eventEmitter.off('tutoring-requests-updated', handleTutoring);
+            eventEmitter.off('tutoring-update', handleTutoring);
+            eventEmitter.off('tutoring-deleted', handleTutoring);
+            eventEmitter.off('ai-logs-updated', handleAiLogs);
+            eventEmitter.off('request-update', handleRequests);
+            eventEmitter.off('request-deleted', handleRequests);
         };
     }, [queryClient]);
 

@@ -98,18 +98,61 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
   useEffect(() => {
     if (!user) return;
 
+    let userTimer: any = null;
+    let requestTimer: any = null;
+    let tutoringTimer: any = null;
+    let messageTimer: any = null;
+    let teacherPayTimer: any = null;
+    let studentPayTimer: any = null;
+
     const handleUserUpdate = () => { 
       if (user.role === 'admin' || user.role === 'teacher') {
-        refetchUsers();
-        refetchTeachers();
-        refetchConversations();
+        if (userTimer) clearTimeout(userTimer);
+        userTimer = setTimeout(() => {
+          refetchUsers();
+          refetchTeachers();
+          refetchConversations();
+        }, 500);
       }
     };
-    const handleRequestUpdate = () => { if (user.role === 'admin' || user.role === 'teacher') refetchTopicRequests(); };
-    const handleTutoringUpdate = () => refetchTutoringRequests();
-    const handleMessageUpdate = () => { if (user.role === 'admin' || user.role === 'teacher') refetchConversations(); };
-    const handleTeacherPaymentUpdate = () => { if (user.role === 'admin') refetchTeacherPayments(); };
-    const handleStudentPaymentUpdate = () => { if (user.role === 'admin') refetchStudentPayments(); };
+    const handleRequestUpdate = () => { 
+      if (user.role === 'admin' || user.role === 'teacher') {
+        if (requestTimer) clearTimeout(requestTimer);
+        requestTimer = setTimeout(() => {
+          refetchTopicRequests();
+        }, 500);
+      }
+    };
+    const handleTutoringUpdate = () => {
+      if (tutoringTimer) clearTimeout(tutoringTimer);
+      tutoringTimer = setTimeout(() => {
+        refetchTutoringRequests();
+      }, 500);
+    };
+    const handleMessageUpdate = () => { 
+      if (user.role === 'admin' || user.role === 'teacher') {
+        if (messageTimer) clearTimeout(messageTimer);
+        messageTimer = setTimeout(() => {
+          refetchConversations();
+        }, 500);
+      }
+    };
+    const handleTeacherPaymentUpdate = () => { 
+      if (user.role === 'admin') {
+        if (teacherPayTimer) clearTimeout(teacherPayTimer);
+        teacherPayTimer = setTimeout(() => {
+          refetchTeacherPayments();
+        }, 500);
+      }
+    };
+    const handleStudentPaymentUpdate = () => { 
+      if (user.role === 'admin') {
+        if (studentPayTimer) clearTimeout(studentPayTimer);
+        studentPayTimer = setTimeout(() => {
+          refetchStudentPayments();
+        }, 500);
+      }
+    };
     
     eventEmitter.on('user-update', handleUserUpdate);
     eventEmitter.on('user-deleted', handleUserUpdate);
@@ -128,6 +171,13 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
 
     // Cleanup listeners on unmount
     return () => {
+      if (userTimer) clearTimeout(userTimer);
+      if (requestTimer) clearTimeout(requestTimer);
+      if (tutoringTimer) clearTimeout(tutoringTimer);
+      if (messageTimer) clearTimeout(messageTimer);
+      if (teacherPayTimer) clearTimeout(teacherPayTimer);
+      if (studentPayTimer) clearTimeout(studentPayTimer);
+
       eventEmitter.off('user-update', handleUserUpdate);
       eventEmitter.off('user-deleted', handleUserUpdate);
       eventEmitter.off('subscription-update', handleUserUpdate);

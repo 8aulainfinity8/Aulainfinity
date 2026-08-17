@@ -344,7 +344,8 @@ export const AdminChatPage: React.FC = () => {
 
     // Real-time listener for active whiteboard sessions
     useEffect(() => {
-        const q = collection(db, 'whiteboardMeta');
+        if (!user || user.role !== 'admin') return;
+        const q = collection(db, 'whiteboards');
         const unsub = onSnapshot(q, (snapshot) => {
             const list: any[] = [];
             snapshot.forEach((docSnap) => {
@@ -358,7 +359,7 @@ export const AdminChatPage: React.FC = () => {
             });
             setActiveBoards(list);
         }, (err) => {
-            console.error("Error fetching whiteboardMeta snapshot:", err);
+            console.error("Error fetching whiteboards snapshot:", err);
         });
         return () => unsub();
     }, []);
@@ -462,7 +463,7 @@ export const AdminChatPage: React.FC = () => {
     const deactivateBoard = async (boardId: string) => {
         try {
             if (db && boardId) {
-                const docRef = doc(db, 'whiteboardMeta', boardId);
+                const docRef = doc(db, 'whiteboards', boardId);
                 await updateDoc(docRef, { active: false, updatedBy: `${user?.name} (Admin)`, updatedAt: new Date().toISOString() });
 
                 // Clean up strokes and documents in subcollections
@@ -1154,7 +1155,7 @@ export const AdminChatPage: React.FC = () => {
                                         const nextVal = !showWhiteboard;
                                         setShowWhiteboard(nextVal);
                                         if (selectedConversationId) {
-                                            const docRef = doc(db, 'whiteboardMeta', selectedConversationId);
+                                            const docRef = doc(db, 'whiteboards', selectedConversationId);
                                             setDoc(docRef, {
                                                 active: nextVal,
                                                 updatedBy: user?.name || 'Profesor',

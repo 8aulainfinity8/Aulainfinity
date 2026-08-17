@@ -93,7 +93,7 @@ export const VoiceGroupCall: React.FC<VoiceGroupCallProps> = ({ courseId, onClos
     }, [inCall, isConnecting]);
 
     useEffect(() => {
-        const roomRef = doc(db, 'voiceRooms', courseId);
+        const roomRef = doc(db, 'voice_group_calls', courseId);
         const unsubscribe = onSnapshot(roomRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.data();
@@ -370,7 +370,7 @@ export const VoiceGroupCall: React.FC<VoiceGroupCallProps> = ({ courseId, onClos
     };
 
     const joinRoomFirestore = async () => {
-        const roomRef = doc(db, 'voiceRooms', courseId);
+        const roomRef = doc(db, 'voice_group_calls', courseId);
         try {
             const roomSnap = await getDoc(roomRef);
             const participantObj = {
@@ -412,7 +412,7 @@ export const VoiceGroupCall: React.FC<VoiceGroupCallProps> = ({ courseId, onClos
     };
 
     const leaveRoomFirestore = async (forceEnd = false) => {
-        const roomRef = doc(db, 'voiceRooms', courseId);
+        const roomRef = doc(db, 'voice_group_calls', courseId);
         const signalingRoomRef = doc(db, 'rooms', `room_${courseId}`);
         const { deleteField } = await import('firebase/firestore');
         try {

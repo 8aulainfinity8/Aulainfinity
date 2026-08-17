@@ -19,7 +19,11 @@ export const GamificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     const { addToast } = useContext(NotificationContext);
 
     // Fetch necessary data
-    const { data: courses } = useQuery<CourseLevel[]>({ queryKey: ['courses'], queryFn: api.fetchCourses });
+    const { data: courses } = useQuery<CourseLevel[]>({ 
+        queryKey: ['courses'], 
+        queryFn: api.fetchCourses,
+        enabled: !!user && user.role === 'student',
+    });
     const { data: studentAnswers } = useQuery<StudentAnswer[]>({
         queryKey: ['studentAnswers', user?.id],
         queryFn: () => api.fetchStudentAnswers(user!.id),

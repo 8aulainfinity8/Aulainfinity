@@ -4,15 +4,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ROUTES } from '../constants/routes';
-import { isAdminEmail } from '../constants/auth';
 
 interface AdminProtectedRouteProps {
     children?: React.ReactNode;
 }
 
 /**
- * Route protection mechanism that checks the user's Firestore 'role' field
- * to restrict access to '/admin' routes for non-admin users.
+ * Route protection mechanism that checks the user's authoritative role
+ * to restrict access to '/admin' routes strictly to admin users.
  */
 export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) => {
     const { user, loading: authLoading } = useAuth();
@@ -32,8 +31,8 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ childr
                 return;
             }
 
-            // Immediately confirm master admin email or existing admin role to avoid network hangs or downgrades
-            if (isAdminEmail(user.email) || user.role === 'admin') {
+            // Immediately confirm if already identified as admin
+            if (user.role === 'admin') {
                 if (isMounted) {
                     setFirestoreRole('admin');
                     setIsCheckingRole(false);
@@ -97,7 +96,7 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ childr
         return <Navigate to={ROUTES.LOGIN} replace />;
     }
 
-    const activeRole = (isAdminEmail(user.email) || user.role === 'admin') ? 'admin' : (firestoreRole || user.role);
+    const activeRole = user.role === 'admin' ? 'admin' : (firestoreRole || user.role);
 
     if (activeRole !== 'admin') {
         console.warn(`[AdminProtectedRoute] Acceso denegado a rutas /admin. Rol detectado: '${activeRole}'. Redirigiendo a /app.`);

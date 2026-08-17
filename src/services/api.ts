@@ -13,7 +13,6 @@ import * as geminiService from './geminiService';
 import { eventEmitter } from './eventService';
 import { deleteVideoFileFromStorage } from "./storageService";
 import { auth, db } from './firebase';
-import { isAdminEmail } from '../constants/auth';
 import { collection, addDoc, getDocs, getDoc, deleteDoc, query, where, serverTimestamp, setDoc, doc } from 'firebase/firestore';
 import { 
     createUserWithEmailAndPassword, 
@@ -116,7 +115,7 @@ export const authenticateStudent = async (email: string, password: string): Prom
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             if (userCredential.user) {
-                if (!userCredential.user.emailVerified && !isAdminEmail(email)) {
+                if (!userCredential.user.emailVerified) {
                     await auth.signOut().catch(() => {});
                     throw new Error("⚠️ Tu correo electrónico aún no ha sido verificado. Por favor, revisa tu bandeja de entrada o carpeta de spam y haz clic en el enlace de confirmación antes de iniciar sesión.");
                 }
@@ -126,18 +125,6 @@ export const authenticateStudent = async (email: string, password: string): Prom
         } catch (fbError: any) {
             if (fbError.message && fbError.message.includes("aún no ha sido verificado")) {
                 throw fbError;
-            }
-            if (isAdminEmail(email)) {
-                try {
-                    // Intenta registrar al administrador maestro si no existe en Firebase Authentication
-                    const registerCred = await createUserWithEmailAndPassword(auth, email, password);
-                    if (registerCred.user) {
-                        firebaseAuthSuccess = true;
-                        firebaseUid = registerCred.user.uid;
-                    }
-                } catch (createErr: any) {
-                    console.warn("Failed to auto-create admin in Firebase Auth:", createErr.message);
-                }
             }
             if (!firebaseAuthSuccess && (fbError.code === 'auth/user-not-found' || fbError.code === 'auth/wrong-password' || fbError.code === 'auth/invalid-credential' || fbError.code === 'auth/invalid-email')) {
                 return undefined;
@@ -203,17 +190,6 @@ export const authenticateStudent = async (email: string, password: string): Prom
             }
         }
 
-        if (isAdminEmail(email)) {
-            user = {
-                id: firebaseUid || 'admin1',
-                name: 'Admin Master',
-                email: email,
-                role: 'admin',
-                username: 'admin',
-                avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200'
-            } as any;
-        }
-
         if (user) {
             dbMock.dbUpdateUserPassword(email, password);
         } else {
@@ -238,15 +214,11 @@ export const authenticateStudent = async (email: string, password: string): Prom
             } as unknown as StudentUser;
             dbMock.usersData.push(user as StudentUser);
         }
-        syncUserToFirestore(user, user.role || 'student', firebaseUid).catch((err) => console.warn('[AuthSync] Background sync note:', err));
         return user;
     }
 
     if (!auth) {
         user = dbMock.dbAuthenticateStudent(email, password);
-        if (user) {
-            syncUserToFirestore(user, user.role || 'student').catch((err) => console.warn('[AuthSync] Background sync note:', err));
-        }
         return user;
     }
 
@@ -292,23 +264,7 @@ export const loginWithGoogle = async (intendedRole: 'student' | 'teacher' = 'stu
     
     let user: AnyUser | undefined;
     
-    // 1. Administrador maestro
-    if (isAdminEmail(email)) {
-        const adminUser: AdminUser = {
-            id: firebaseUid || 'admin1',
-            name: displayName || 'Admin Master',
-            email: email,
-            role: 'admin',
-            username: 'admin'
-        };
-        if (!dbMock.adminUserData.some(a => a.email?.toLowerCase() === email)) {
-            dbMock.adminUserData.push(adminUser);
-        }
-        await syncUserToFirestore(adminUser, 'admin', firebaseUid).catch(() => {});
-        return adminUser;
-    }
-    
-    // 2. Comprobar si el usuario ya existe en Firestore o Mock DB
+    // 1. Comprobar si el usuario ya existe en Firestore o Mock DB
     user = dbMock.dbFindUserByEmail(email);
     
     if (!user && db) {
@@ -363,7 +319,6 @@ export const loginWithGoogle = async (intendedRole: 'student' | 'teacher' = 'stu
                 dbMock.usersData.push(user as StudentUser);
             }
         }
-        await syncUserToFirestore(user, user.role || 'student', firebaseUid).catch(() => {});
         return user;
     }
     
@@ -417,56 +372,99 @@ export const loginWithGoogle = async (intendedRole: 'student' | 'teacher' = 'stu
 };
 
 export const registerStudent = async (data: { name: string; email: string; password?: string; enrolledCourseIds: string[]; phone: string }): Promise<StudentUser> => {
-    const newUser = dbMock.dbRegisterStudent(data);
+    // 1. Firebase Auth Creation / Link
+    let firebaseUser: any = null;
 
     if (data.password && auth) {
-        let firebaseUser = null;
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             firebaseUser = userCredential.user;
         } catch (firebaseErr: any) {
-            console.warn('Firebase Auth registration note:', firebaseErr.message);
+            console.warn('Firebase Auth registration error:', firebaseErr.message);
             if (firebaseErr.code === 'auth/email-already-in-use') {
                 try {
                     const signCred = await signInWithEmailAndPassword(auth, data.email, data.password);
                     firebaseUser = signCred.user;
                 } catch (e: any) {
-                    console.warn('Firebase Auth sign in existing user error:', e.message);
+                    throw new Error("Este correo electrónico ya está en uso. Si ya te has registrado antes, inicia sesión.");
                 }
             } else if (firebaseErr.code === 'auth/api-key-not-valid' || (firebaseErr.message && firebaseErr.message.includes('api-key-not-valid'))) {
                 throw new Error("⚠️ La clave de API de Firebase aún no está aprovisionada. Acepta los términos en la ventana emergente de Firebase para completar la vinculación.");
             } else if (firebaseErr.code === 'auth/operation-not-allowed' || (firebaseErr.message && firebaseErr.message.includes('operation-not-allowed'))) {
                 throw new Error("⚠️ El método de autenticación con Correo/Contraseña está desactivado en la consola de Firebase. Actívalo en: Firebase Console > Authentication > Sign-in method > Correo electrónico/Contraseña.");
+            } else if (firebaseErr.code === 'auth/weak-password') {
+                throw new Error("⚠️ La contraseña es demasiado débil. Usa al menos 6 caracteres.");
+            } else if (firebaseErr.code === 'auth/invalid-email') {
+                throw new Error("⚠️ El formato del correo electrónico no es válido.");
             } else {
                 throw new Error(`⚠️ Error en autenticación de Firebase: ${firebaseErr.message}`);
             }
         }
-
-        // Always sync user to Firestore first
-        await syncUserToFirestore(newUser, 'student', firebaseUser?.uid);
-
-        if (firebaseUser && !firebaseUser.emailVerified) {
-            try {
-                await sendEmailVerification(firebaseUser, { url: window.location.href });
-            } catch (emailErr: any) {
-                console.warn('Firebase Auth sendEmailVerification note:', emailErr.code, emailErr.message);
-                try {
-                    await sendEmailVerification(firebaseUser);
-                } catch (fallbackErr: any) {
-                    console.warn('Firebase Auth sendEmailVerification fallback note:', fallbackErr.code, fallbackErr.message);
-                    if (fallbackErr.code === 'auth/too-many-requests' || emailErr.code === 'auth/too-many-requests') {
-                        throw new Error("⚠️ Firebase ha limitado temporalmente los envíos de correo por realizar demasiadas solicitudes continuas. Por favor espera 2-3 minutos.");
-                    }
-                    throw new Error(`⚠️ Firebase no pudo enviar el correo de verificación. Detalle: ${fallbackErr.message || emailErr.message}. Revisa en Firebase Console > Authentication > Settings que el dominio de la aplicación esté autorizado.`);
-                }
-            }
-            await auth.signOut().catch(() => {});
-        }
-    } else {
-        await syncUserToFirestore(newUser, 'student');
     }
 
-    return newUser;
+    const assignedUid = firebaseUser?.uid || `student_${Date.now()}`;
+    const studentData: StudentUser = {
+        id: assignedUid,
+        uid: assignedUid,
+        firebaseUid: assignedUid,
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: 'student',
+        watchedVideos: [],
+        favoriteVideos: [],
+        enrolledCourseIds: data.enrolledCourseIds || [],
+        completedVideoIds: [],
+        unlockedRewardIds: [],
+        unlockedBadgeIds: [],
+        isSubscribed: false,
+        registrationDate: new Date().toISOString(),
+        phone: data.phone,
+        creditsBalance: 5,
+    };
+
+    // 2. Sync / Persist to Firestore while STILL authenticated (request.auth is valid)
+    try {
+        await syncUserToFirestore(studentData, 'student', firebaseUser?.uid);
+    } catch (firestoreErr: any) {
+        console.error('[RegisterStudent] Firestore write failure:', firestoreErr);
+        throw new Error(`⚠️ No se pudo guardar la información del usuario en Firestore: ${firestoreErr.message || 'Permiso denegado o error de red.'}`);
+    }
+
+    // 3. Send Verification Email if applicable
+    if (firebaseUser && !firebaseUser.emailVerified) {
+        try {
+            await sendEmailVerification(firebaseUser, { url: window.location.href });
+        } catch (emailErr: any) {
+            console.warn('Firebase Auth sendEmailVerification note:', emailErr.code, emailErr.message);
+            try {
+                await sendEmailVerification(firebaseUser);
+            } catch (fallbackErr: any) {
+                console.warn('Firebase Auth sendEmailVerification fallback note:', fallbackErr.code, fallbackErr.message);
+                if (fallbackErr.code === 'auth/too-many-requests' || emailErr.code === 'auth/too-many-requests') {
+                    throw new Error("⚠️ Firebase ha limitado temporalmente los envíos de correo por realizar demasiadas solicitudes continuas. Por favor espera 2-3 minutos.");
+                }
+                throw new Error(`⚠️ Firebase no pudo enviar el correo de verificación. Detalle: ${fallbackErr.message || emailErr.message}. Revisa en Firebase Console > Authentication > Settings que el dominio de la aplicación esté autorizado.`);
+            }
+        }
+    }
+
+    // 4. Update Mock / Local State ONLY AFTER successful Firebase operations
+    let finalStudent: StudentUser;
+    try {
+        // Clean any stale user with the same email if exists in local memory to allow retries
+        dbMock.dbPurgeUserFromMemory(data.email);
+        finalStudent = dbMock.dbRegisterStudent(data);
+    } catch (mockErr: any) {
+        finalStudent = studentData;
+    }
+
+    // 5. Sign out ONLY AFTER all authenticated Firestore writes are fully resolved
+    if (firebaseUser && auth) {
+        await auth.signOut().catch(() => {});
+    }
+
+    return finalStudent;
 };
 
 export const registerTeacher = async (data: { 
@@ -479,56 +477,99 @@ export const registerTeacher = async (data: {
     levels?: string[];
     schedules?: string[];
 }): Promise<TeacherUser> => {
-    const newTeacher = dbMock.dbRegisterTeacher(data);
+    // 1. Firebase Auth Creation / Link
+    let firebaseUser: any = null;
 
     if (data.password && auth) {
-        let firebaseUser = null;
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
             firebaseUser = userCredential.user;
         } catch (firebaseErr: any) {
-            console.warn('Firebase Auth registration note:', firebaseErr.message);
+            console.warn('Firebase Auth registration error:', firebaseErr.message);
             if (firebaseErr.code === 'auth/email-already-in-use') {
                 try {
                     const signCred = await signInWithEmailAndPassword(auth, data.email, data.password);
                     firebaseUser = signCred.user;
                 } catch (e: any) {
-                    console.warn('Firebase Auth email re-verify error:', e.message);
+                    throw new Error("Este correo electrónico ya está en uso. Si ya te has registrado antes, inicia sesión.");
                 }
             } else if (firebaseErr.code === 'auth/api-key-not-valid' || (firebaseErr.message && firebaseErr.message.includes('api-key-not-valid'))) {
                 throw new Error("⚠️ La clave de API de Firebase aún no está aprovisionada. Acepta los términos en la ventana emergente de Firebase para completar la vinculación.");
             } else if (firebaseErr.code === 'auth/operation-not-allowed' || (firebaseErr.message && firebaseErr.message.includes('operation-not-allowed'))) {
                 throw new Error("⚠️ El método de autenticación con Correo/Contraseña está desactivado en la consola de Firebase. Actívalo en: Firebase Console > Authentication > Sign-in method > Correo electrónico/Contraseña.");
+            } else if (firebaseErr.code === 'auth/weak-password') {
+                throw new Error("⚠️ La contraseña es demasiado débil. Usa al menos 6 caracteres.");
+            } else if (firebaseErr.code === 'auth/invalid-email') {
+                throw new Error("⚠️ El formato del correo electrónico no es válido.");
             } else {
                 throw new Error(`⚠️ Error en autenticación de Firebase: ${firebaseErr.message}`);
             }
         }
-
-        // Always sync teacher to Firestore first
-        await syncUserToFirestore(newTeacher, 'teacher', firebaseUser?.uid);
-
-        if (firebaseUser && !firebaseUser.emailVerified) {
-            try {
-                await sendEmailVerification(firebaseUser, { url: window.location.href });
-            } catch (emailErr: any) {
-                console.warn('Firebase Auth sendEmailVerification note:', emailErr.code, emailErr.message);
-                try {
-                    await sendEmailVerification(firebaseUser);
-                } catch (fallbackErr: any) {
-                    console.warn('Firebase Auth sendEmailVerification fallback note:', fallbackErr.code, fallbackErr.message);
-                    if (fallbackErr.code === 'auth/too-many-requests' || emailErr.code === 'auth/too-many-requests') {
-                        throw new Error("⚠️ Firebase ha limitado temporalmente los envíos de correo por realizar demasiadas solicitudes continuas. Por favor espera 2-3 minutos.");
-                    }
-                    throw new Error(`⚠️ Firebase no pudo enviar el correo de verificación. Detalle: ${fallbackErr.message || emailErr.message}. Revisa en Firebase Console > Authentication > Settings que el dominio de la aplicación esté autorizado.`);
-                }
-            }
-            await auth.signOut().catch(() => {});
-        }
-    } else {
-        await syncUserToFirestore(newTeacher, 'teacher');
     }
 
-    return newTeacher;
+    const assignedUid = firebaseUser?.uid || `teacher_${Date.now()}`;
+    const teacherData: TeacherUser = {
+        id: assignedUid,
+        uid: assignedUid,
+        firebaseUid: assignedUid,
+        name: data.name,
+        email: data.email,
+        password: data.password || 'password123',
+        role: 'teacher',
+        phone: data.phone,
+        avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${encodeURIComponent(data.name)}`,
+        category: data.category,
+        isApprovedForTutoring: false, // Strict: Pending admin approval, non-escalatable
+        subjects: data.subjects || [],
+        levels: data.levels || [],
+        schedules: data.schedules || [],
+        taughtCourseIds: [],
+        coursesTaughtIds: [],
+        favoriteVideos: []
+    };
+
+    // 2. Sync / Persist to Firestore while STILL authenticated (request.auth is valid)
+    try {
+        await syncUserToFirestore(teacherData, 'teacher', firebaseUser?.uid);
+    } catch (firestoreErr: any) {
+        console.error('[RegisterTeacher] Firestore write failure:', firestoreErr);
+        throw new Error(`⚠️ No se pudo guardar el perfil del profesor en Firestore: ${firestoreErr.message || 'Permiso denegado o error de red.'}`);
+    }
+
+    // 3. Send Verification Email if applicable
+    if (firebaseUser && !firebaseUser.emailVerified) {
+        try {
+            await sendEmailVerification(firebaseUser, { url: window.location.href });
+        } catch (emailErr: any) {
+            console.warn('Firebase Auth sendEmailVerification note:', emailErr.code, emailErr.message);
+            try {
+                await sendEmailVerification(firebaseUser);
+            } catch (fallbackErr: any) {
+                console.warn('Firebase Auth sendEmailVerification fallback note:', fallbackErr.code, fallbackErr.message);
+                if (fallbackErr.code === 'auth/too-many-requests' || emailErr.code === 'auth/too-many-requests') {
+                    throw new Error("⚠️ Firebase ha limitado temporalmente los envíos de correo por realizar demasiadas solicitudes continuas. Por favor espera 2-3 minutos.");
+                }
+                throw new Error(`⚠️ Firebase no pudo enviar el correo de verificación. Detalle: ${fallbackErr.message || emailErr.message}. Revisa en Firebase Console > Authentication > Settings que el dominio de la aplicación esté autorizado.`);
+            }
+        }
+    }
+
+    // 4. Update Mock / Local State ONLY AFTER successful Firebase operations
+    let finalTeacher: TeacherUser;
+    try {
+        // Clean any stale user with the same email if exists in local memory to allow retries
+        dbMock.dbPurgeUserFromMemory(data.email);
+        finalTeacher = dbMock.dbRegisterTeacher(data);
+    } catch (mockErr: any) {
+        finalTeacher = teacherData;
+    }
+
+    // 5. Sign out ONLY AFTER all authenticated Firestore writes are fully resolved
+    if (firebaseUser && auth) {
+        await auth.signOut().catch(() => {});
+    }
+
+    return finalTeacher;
 };
 
 export const authenticateAdmin = async (username: string, password: string): Promise<AdminUser | undefined> => {

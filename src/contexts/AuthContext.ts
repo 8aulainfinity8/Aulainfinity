@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     useEffect(() => {
-        if (user && user.role !== 'admin' && auth && auth.currentUser) {
+        if (user && auth && auth.currentUser) {
             if (auth.currentUser.email?.toLowerCase() === user.email?.toLowerCase()) {
                 auth.currentUser.reload().then(() => {
                     if (auth.currentUser && !auth.currentUser.emailVerified) {
@@ -122,7 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [setUser]);
 
     const login = useCallback((userData: AnyUser) => {
-        if (userData.role !== 'admin' && auth && auth.currentUser) {
+        if (auth && auth.currentUser) {
             if (auth.currentUser.email?.toLowerCase() === userData.email?.toLowerCase()) {
                 if (!auth.currentUser.emailVerified) {
                     console.warn("⚠️ Intento de login bloqueado: El usuario no ha verificado su correo electrónico.");
