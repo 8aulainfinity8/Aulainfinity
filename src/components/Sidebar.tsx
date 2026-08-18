@@ -48,10 +48,10 @@ const NavItem: React.FC<NavItemProps> = React.memo(({ to, icon, label, isSidebar
             end
             onClick={handleClick}
             className={({ isActive }) =>
-                `flex items-center p-3 my-1 rounded-lg transition-all duration-200 outline-none focus:ring-2 focus:ring-primary/20 ${!isSidebarOpen ? 'justify-center whitespace-nowrap' : 'whitespace-normal'} ${
+                `flex items-center px-3.5 py-3 my-1.5 rounded-xl transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${!isSidebarOpen ? 'justify-center whitespace-nowrap' : 'whitespace-normal'} ${
                 isActive
-                    ? 'bg-primary text-white shadow-md'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100'
+                    ? 'bg-primary text-white shadow-md font-semibold'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-700/60 hover:text-slate-900 dark:hover:text-slate-100'
                 }`
             }
         >

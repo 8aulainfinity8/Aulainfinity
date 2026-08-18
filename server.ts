@@ -242,8 +242,9 @@ export const requireRole = (allowedRoles: string[]) => {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
+  app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
@@ -1103,6 +1104,26 @@ async function startServer() {
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`[FULL-STACK] Server running on http://0.0.0.0:${PORT}`);
   });
+
+  // Graceful shutdown handling for Cloud Run & container environments
+  const handleShutdown = (signal: string) => {
+    console.log(`[SHUTDOWN] Received ${signal}. Closing server gracefully...`);
+    wss.close(() => {
+      console.log("[SHUTDOWN] WebSocket server closed.");
+    });
+    server.close(() => {
+      console.log("[SHUTDOWN] HTTP server closed.");
+      process.exit(0);
+    });
+    // Force shutdown after 10s if connections persist
+    setTimeout(() => {
+      console.error("[SHUTDOWN] Forced shutdown after timeout.");
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+  process.on("SIGINT", () => handleShutdown("SIGINT"));
 
   // Simulated Reminder System
   setInterval(async () => {
