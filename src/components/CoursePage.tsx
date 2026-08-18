@@ -19,6 +19,7 @@ import { AuthContext } from '../contexts/AuthContext';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useI18n } from '../hooks/useI18n';
 import { isTeacherCourseAssigned, isTeacherSubjectAssigned } from '../utils/teacherPermissions';
+import { Card, CardTitle, CardDescription } from './ui/Card';
 
 
 // Helper to resolve deterministic or explicit video difficulty level
@@ -153,8 +154,10 @@ const SubjectCard: React.FC<{ subject: Subject; watchedVideos: string[]; onSelec
     };
 
     return (
-        <div 
-            className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg cursor-pointer transform hover:-translate-y-1 transition-transform duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" 
+        <Card 
+            variant="interactive"
+            padding="md"
+            className="cursor-pointer transform hover:-translate-y-1 transition-transform duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             onClick={onSelect}
             onKeyDown={handleKeyDown}
             role="button"
@@ -163,11 +166,11 @@ const SubjectCard: React.FC<{ subject: Subject; watchedVideos: string[]; onSelec
         >
             <div className="flex items-start justify-between">
                 <div>
-                    <div className="p-3 bg-primary/10 inline-block rounded-lg">
+                    <div className="p-3 bg-primary/10 inline-block rounded-xl">
                         <SubjectIcon className="w-8 h-8 text-primary" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 mt-4">{subject.name}</h3>
-                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{totalVideos} vídeos</p>
+                    <CardTitle className="mt-4">{subject.name}</CardTitle>
+                    <CardDescription className="mt-1">{totalVideos} vídeos</CardDescription>
                 </div>
                 <div className="text-right">
                      <span className="text-sm font-semibold text-primary">{progress}%</span>
@@ -176,7 +179,7 @@ const SubjectCard: React.FC<{ subject: Subject; watchedVideos: string[]; onSelec
              <div className="mt-4 bg-gray-200 dark:bg-slate-700 rounded-full h-2">
                 <div className="bg-primary h-2 rounded-full" style={{ width: `${progress}%` }}></div>
             </div>
-        </div>
+        </Card>
     );
 });
 

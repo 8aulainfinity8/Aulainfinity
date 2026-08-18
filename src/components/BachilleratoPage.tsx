@@ -8,22 +8,27 @@ import type { CourseLevel, StudentUser } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useI18n } from '../hooks/useI18n';
+import { Card, CardTitle, CardDescription } from './ui/Card';
 
 const ModalityCard: React.FC<{ level: CourseLevel }> = ({ level }) => {
     const { t } = useI18n();
     const modalityName = level.name.replace(/^\d[º|º]\s*Bachillerato\s*de\s*/, '');
 
     return (
-        <Link to={generateCourseLevelPath(level.id)} className="block bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all transform group border dark:border-slate-700">
-            <div className="p-4 bg-primary/10 inline-block rounded-xl mb-4">
-                <AcademicCapIcon className="w-10 h-10 text-primary" />
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50 group-hover:text-primary transition-colors break-words leading-tight">{modalityName}</h3>
-            <p className="text-slate-600 dark:text-slate-400 mt-2">{t('bachillerato.subjectsAvailable', { count: level.subjects?.length || 0 })}</p>
-            <div className="mt-6 text-primary font-semibold flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <span>{t('common.viewSubject')}</span>
-                <ChevronRightIcon className="w-5 h-5 ml-2 transform group-hover:translate-x-1 transition-transform" />
-            </div>
+        <Link to={generateCourseLevelPath(level.id)} className="block group">
+            <Card variant="interactive" padding="lg" className="h-full flex flex-col justify-between group-hover:border-primary/50">
+                <div>
+                    <div className="p-4 bg-primary/10 inline-block rounded-xl mb-4">
+                        <AcademicCapIcon className="w-10 h-10 text-primary" />
+                    </div>
+                    <CardTitle className="text-xl sm:text-2xl group-hover:text-primary transition-colors leading-tight">{modalityName}</CardTitle>
+                    <CardDescription className="mt-2 text-sm">{t('bachillerato.subjectsAvailable', { count: level.subjects?.length || 0 })}</CardDescription>
+                </div>
+                <div className="mt-6 text-primary font-semibold text-sm flex items-center pt-4 border-t border-slate-100 dark:border-slate-700/60 opacity-90 group-hover:opacity-100 transition-opacity">
+                    <span>{t('common.viewSubject')}</span>
+                    <ChevronRightIcon className="w-5 h-5 ml-2 transform group-hover:translate-x-1 transition-transform" />
+                </div>
+            </Card>
         </Link>
     );
 };
