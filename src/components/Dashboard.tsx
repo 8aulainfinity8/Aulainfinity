@@ -38,6 +38,7 @@ import { useI18n } from '../hooks/useI18n';
 import { TeacherDashboard } from './TeacherDashboard';
 import { StudentLessonsPerformanceChart } from './StudentLessonsPerformanceChart';
 import { StudentTutoringProgressChart } from './StudentTutoringProgressChart';
+import { Badge, EmptyState } from './ui';
 
 // --- COMPONENTS FOR SUBSCRIBED DASHBOARD ---
 
@@ -103,14 +104,14 @@ const RecentlyWatched: React.FC<{ watchedVideos: string[], courses: CourseLevel[
     }
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-4">{t('dashboard.recentlyWatched')}</h3>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700/80">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-4 font-display">{t('dashboard.recentlyWatched')}</h3>
             <ul className="space-y-3">
                 {recentVideos.map(video => (
                     <li key={video.id}>
-                        <Link to={generateVideoPath(video.id)} className="flex items-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        <Link to={generateVideoPath(video.id)} className="flex items-center p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors">
                            <PlayIcon className="w-6 h-6 text-primary flex-shrink-0" />
-                           <span className="ml-3 text-slate-900 dark:text-slate-300">{video.title}</span>
+                           <span className="ml-3 text-slate-900 dark:text-slate-300 font-medium">{video.title}</span>
                         </Link>
                     </li>
                 ))}
@@ -132,25 +133,21 @@ const QuizHistorySection: React.FC<{ studentAnswers: StudentAnswer[], videoMap: 
 
     if (sortedAnswers.length === 0) {
         return (
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700">
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <div className="p-3 bg-indigo-50 dark:bg-slate-900/50 text-indigo-600 dark:text-indigo-400 rounded-full mb-3">
-                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{t('dashboard.noQuizzesTitle')}</h3>
-                    <p className="text-sm text-slate-500 max-w-sm mt-1">{t('dashboard.noQuizzesSubtitle')}</p>
-                </div>
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700/80">
+                <EmptyState
+                    icon={<Brain className="w-8 h-8 text-indigo-500" />}
+                    title={t('dashboard.noQuizzesTitle')}
+                    description={t('dashboard.noQuizzesSubtitle')}
+                />
             </div>
         );
     }
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700/80">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-4 mb-5">
                 <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 font-display">
                         <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -158,9 +155,9 @@ const QuizHistorySection: React.FC<{ studentAnswers: StudentAnswer[], videoMap: 
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('dashboard.quizHistorySubtitle')}</p>
                 </div>
-                <span className="text-xs font-semibold px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-full">
+                <Badge variant="primary" size="sm">
                     {sortedAnswers.length} {sortedAnswers.length === 1 ? 'Quiz' : 'Quizzes'}
-                </span>
+                </Badge>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -170,20 +167,14 @@ const QuizHistorySection: React.FC<{ studentAnswers: StudentAnswer[], videoMap: 
                     const percentage = Math.round((answer.score / answer.totalQuestions) * 100);
                     
                     // Style badges based on score
-                    let scoreBadgeColorAndText = {
-                        color: 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-100/40 dark:border-emerald-900/30',
-                        text: t('dashboard.outstanding')
-                    };
+                    let badgeVariant: 'success' | 'danger' | 'primary' = 'success';
+                    let badgeText = t('dashboard.outstanding');
                     if (percentage < 60) {
-                        scoreBadgeColorAndText = {
-                            color: 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border-rose-100/40 dark:border-rose-900/30',
-                            text: t('dashboard.review')
-                        };
+                        badgeVariant = 'danger';
+                        badgeText = t('dashboard.review');
                     } else if (percentage < 85) {
-                        scoreBadgeColorAndText = {
-                            color: 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-100/40 dark:border-blue-900/30',
-                            text: t('dashboard.passed')
-                        };
+                        badgeVariant = 'primary';
+                        badgeText = t('dashboard.passed');
                     }
 
                     return (
@@ -193,16 +184,16 @@ const QuizHistorySection: React.FC<{ studentAnswers: StudentAnswer[], videoMap: 
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.2, delay: Math.min(index * 0.05, 0.4) }}
                             whileHover={{ scale: 1.01 }}
-                            className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-850 p-4 rounded-xl flex flex-col justify-between hover:shadow-premium-hover hover:border-indigo-100 hover:dark:border-slate-700 transition-all"
+                            className="bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-750 p-4 rounded-xl flex flex-col justify-between hover:shadow-premium-hover hover:border-indigo-100 hover:dark:border-slate-700 transition-all"
                         >
                             <div>
                                 <div className="flex justify-between items-start gap-2 mb-2">
                                     <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm line-clamp-2" title={quizName}>
                                         {quizName}
                                     </h4>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${scoreBadgeColorAndText.color}`}>
-                                        {scoreBadgeColorAndText.text}
-                                    </span>
+                                    <Badge variant={badgeVariant} size="sm" dot>
+                                        {badgeText}
+                                    </Badge>
                                 </div>
                                 <div className="space-y-1.5 text-xs text-slate-550 dark:text-slate-400 mt-2 font-medium">
                                     <div className="flex items-center gap-1.5">
@@ -213,7 +204,7 @@ const QuizHistorySection: React.FC<{ studentAnswers: StudentAnswer[], videoMap: 
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
                                         <span>{t('dashboard.correct')} <strong className="text-slate-700 dark:text-slate-300">{answer.score}</strong> {t('dashboard.of')} {answer.totalQuestions} ({percentage}%)</span>
                                     </div>
