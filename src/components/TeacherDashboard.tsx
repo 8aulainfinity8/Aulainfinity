@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   Users
 } from 'lucide-react';
+import { Card, CardTitle, CardDescription, Badge, Button, EmptyState, Skeleton } from './ui';
 import { WorkloadChart } from './WorkloadChart';
 import { isTeacherMatchForSubject, isTutoringRequestForTeacher } from '../utils/tutoringHelpers';
 import { useI18n } from '../hooks/useI18n';
@@ -85,7 +86,7 @@ const QuizSubmissionDetails: React.FC<{ videoId: string; answer: StudentAnswer }
                                     const isSelected = studentChoice === optIdx;
                                     const isCorrectOpt = optIdx === question.correctAnswerIndex;
                                     
-                                    let itemColor = "text-slate-500 dark:text-slate-400 border-gray-100 dark:border-slate-800 bg-slate-50/50";
+                                    let itemColor = "text-slate-500 dark:text-slate-400 border-slate-100 dark:border-slate-800 bg-slate-50/50";
                                     if (isSelected && isCorrect) {
                                         itemColor = "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-400 font-bold border-2";
                                     } else if (isSelected && !isCorrect) {
@@ -763,7 +764,7 @@ export const TeacherDashboard: React.FC = () => {
                     {/* Bottom Content Splits */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Col 1 & 2: Recent Student Questions */}
-                        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200/50 dark:border-slate-700 overflow-hidden">
+                        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200/50 dark:border-slate-700 overflow-hidden overflow-x-auto">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <span className="p-2 bg-indigo-50 dark:bg-indigo-950/45 text-indigo-600 dark:text-indigo-400 rounded-lg">
@@ -776,7 +777,7 @@ export const TeacherDashboard: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                            <div className="divide-y overflow-x-auto divide-slate-100 dark:divide-slate-700">
                                 {teacherConversations.length > 0 ? (
                                     teacherConversations.slice(0, 5).map((conv) => (
                                         <div key={conv.id} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-750 transition flex items-center justify-between gap-4">
@@ -1087,7 +1088,7 @@ export const TeacherDashboard: React.FC = () => {
                                                         <span className="text-slate-500 dark:text-slate-400">Clases del Curso Vistas:</span>
                                                         <span className="text-slate-800 dark:text-slate-200 font-bold font-mono">{stats?.completedVideos} / {stats?.totalCourseVideos} ({watchPercentage}%)</span>
                                                     </div>
-                                                    <div className="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                                                    <div className="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden overflow-x-auto">
                                                         <div 
                                                             className={`h-1.5 rounded-full transition-all duration-300 ${
                                                                 watchPercentage > 80 ? 'bg-emerald-500' : watchPercentage > 40 ? 'bg-primary' : 'bg-indigo-300'
@@ -1362,7 +1363,7 @@ export const TeacherDashboard: React.FC = () => {
                                                                 </div>
                                                                 
                                                                 <div>
-                                                                    <div className="w-full bg-slate-200 dark:bg-slate-905 bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                                                    <div className="w-full bg-slate-200 dark:bg-slate-905 bg-slate-200 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden overflow-x-auto">
                                                                         <div 
                                                                             className="h-1.5 rounded-full bg-indigo-600 transition-all duration-300"
                                                                             style={{ width: `${subject.percent}%` }}

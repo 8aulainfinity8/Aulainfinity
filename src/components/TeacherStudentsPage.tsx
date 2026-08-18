@@ -32,6 +32,7 @@ import {
   Mail,
   Sliders
 } from 'lucide-react';
+import { Card, CardTitle, CardDescription, Badge, Button, EmptyState, Skeleton } from './ui';
 
 export const TeacherStudentsPage: React.FC = () => {
   const { t } = useI18n();
@@ -326,7 +327,7 @@ export const TeacherStudentsPage: React.FC = () => {
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
             )}
             <span className="font-medium">{feedback.message}</span>
-            <button onClick={() => setFeedback(null)} className="ml-auto text-slate-400 hover:text-slate-600">
+            <button aria-label="Cerrar mensaje" onClick={() => setFeedback(null)} className="ml-auto text-slate-400 hover:text-slate-600 cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </motion.div>
@@ -366,6 +367,7 @@ export const TeacherStudentsPage: React.FC = () => {
               />
               {searchQuery && (
                 <button
+                  aria-label="Limpiar búsqueda"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
@@ -638,8 +640,9 @@ export const TeacherStudentsPage: React.FC = () => {
 
                   <div className="flex items-center gap-2">
                     <button
+                      aria-label="Reducir créditos"
                       onClick={() => handleUpdateCredits(creditsVal - 1)}
-                      className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl transition text-slate-600 dark:text-slate-300 disabled:opacity-50 shadow-xs"
+                      className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl transition text-slate-600 dark:text-slate-300 disabled:opacity-50 shadow-xs cursor-pointer"
                       disabled={!isAdmin || creditsVal <= 0}
                     >
                       <Minus className="w-4 h-4" />
@@ -653,8 +656,9 @@ export const TeacherStudentsPage: React.FC = () => {
                       min="0"
                     />
                     <button
+                      aria-label="Añadir créditos"
                       onClick={() => handleUpdateCredits(creditsVal + 1)}
-                      className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl transition text-slate-600 dark:text-slate-300 disabled:opacity-50 shadow-xs"
+                      className="p-2 bg-white dark:bg-slate-800 hover:bg-slate-50 border border-slate-200 dark:border-slate-700 rounded-xl transition text-slate-600 dark:text-slate-300 disabled:opacity-50 shadow-xs cursor-pointer"
                       disabled={!isAdmin}
                     >
                       <Plus className="w-4 h-4" />
@@ -686,6 +690,7 @@ export const TeacherStudentsPage: React.FC = () => {
                         </div>
                       </div>
                       <button
+                        aria-label="Alternar Asistente IA"
                         onClick={() => handleSavePermissions(!aiEnabled, videosEnabled)}
                         disabled={!isAdmin || !aiEnabledGlobally}
                         title={!aiEnabledGlobally ? "La IA está desactivada globalmente" : (!isAdmin ? "Solo el administrador puede cambiar permisos" : "")}
@@ -711,6 +716,7 @@ export const TeacherStudentsPage: React.FC = () => {
                         </div>
                       </div>
                       <button
+                        aria-label="Alternar acceso a videos"
                         onClick={() => handleSavePermissions(aiEnabled, !videosEnabled)}
                         disabled={!isAdmin || !videosEnabledGlobally}
                         title={!videosEnabledGlobally ? "El acceso a vídeos está desactivado globalmente" : (!isAdmin ? "Solo el administrador puede cambiar permisos" : "")}

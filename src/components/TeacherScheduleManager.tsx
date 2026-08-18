@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TeacherUser } from '../types';
 import { DAYS_OF_WEEK, PRESET_TIME_SLOTS, parseTeacherSchedules, formatSchedulesForDb } from '../utils/scheduleUtils';
 import { Calendar, Clock, Plus, Trash2, CheckCircle, Sparkles, BookOpen, Layers, Save } from 'lucide-react';
+import { Card, CardTitle, CardDescription, Badge, Button, EmptyState, Skeleton } from './ui';
 
 interface TeacherScheduleManagerProps {
   teacher: TeacherUser;
@@ -289,6 +290,7 @@ export const TeacherScheduleManager: React.FC<TeacherScheduleManagerProps> = ({
                       {time}
                       <button
                         type="button"
+                        aria-label="Eliminar esta hora"
                         onClick={() => handleRemoveTime(num, time)}
                         className="text-indigo-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                         title="Eliminar esta hora"
