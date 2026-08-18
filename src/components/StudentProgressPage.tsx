@@ -10,6 +10,7 @@ import { FileDown } from 'lucide-react';
 // FIX: Imported the missing 'QuestionMarkCircleIcon' to resolve the 'Cannot find name' error.
 import { TrophyIcon, ChartBarIcon, CheckCircleIcon, VideoCameraIcon, AcademicCapIcon, LightBulbIcon, BookOpenIcon, QuestionMarkCircleIcon } from './icons';
 import { EmptyState } from './ui/EmptyState';
+import { Badge as UiBadge } from './ui';
 import { useI18n } from '../hooks/useI18n';
 
 // A local map to render badge icons dynamically from their string names.
@@ -62,13 +63,20 @@ const BadgeCard: React.FC<{ badge: Badge, earned: boolean }> = ({ badge, earned 
 
 const QuizResultCard: React.FC<{ answer: StudentAnswer, quizName: string }> = ({ answer, quizName }) => {
     const percentage = Math.round((answer.score / answer.totalQuestions) * 100);
+    let badgeVariant: 'success' | 'danger' | 'primary' = 'success';
+    if (percentage < 60) badgeVariant = 'danger';
+    else if (percentage < 85) badgeVariant = 'primary';
+
     return (
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
-            <p className="font-bold text-slate-900 dark:text-slate-100">{quizName}</p>
-            <p className="text-sm text-slate-600 dark:text-slate-400">Realizado: {new Date(answer.timestamp).toLocaleDateString()}</p>
-            <div className="flex items-center justify-between mt-2">
-                <p className="text-lg font-bold text-primary">{percentage}%</p>
-                <p className="text-sm text-slate-700 dark:text-slate-300">({answer.score}/{answer.totalQuestions} correctas)</p>
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700/80 transition-all hover:shadow-premium-hover">
+            <div className="flex items-start justify-between gap-2">
+                <p className="font-bold text-slate-900 dark:text-slate-100 font-display">{quizName}</p>
+                <UiBadge variant={badgeVariant} size="sm" dot>{percentage}%</UiBadge>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Realizado: {new Date(answer.timestamp).toLocaleDateString()}</p>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 text-xs font-medium text-slate-600 dark:text-slate-300">
+                <span>Puntuación obtenida</span>
+                <strong className="text-slate-900 dark:text-slate-100">{answer.score} de {answer.totalQuestions} correctas</strong>
             </div>
         </div>
     );
