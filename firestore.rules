@@ -196,22 +196,59 @@ service cloud.firestore {
     }
 
     match /quiz_answers/{answerId} {
-      allow read: if isVerifiedUser() && (isParticipant(resource.data) || isIdParticipant(answerId));
-      allow create: if isVerifiedUser();
-      allow update, delete: if isVerifiedUser() && (isParticipant(resource.data) || isIdParticipant(answerId));
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && resource.data.studentId == request.auth.uid) ||
+        isParticipant(resource.data) ||
+        isIdParticipant(answerId)
+      );
+      allow create: if isVerifiedUser() && request.resource.data.studentId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
     // 4. Tutoring Requests & Topic Requests
     match /firestore_tutoring_requests/{requestId} {
-      allow read: if isVerifiedUser() && (isApprovedTeacher() || isParticipant(resource.data) || isIdParticipant(requestId));
-      allow create: if isVerifiedUser();
-      allow update, delete: if isVerifiedUser() && (isApprovedTeacher() || isParticipant(resource.data) || isIdParticipant(requestId));
+      allow read: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && (
+          resource.data.studentId == request.auth.uid ||
+          resource.data.teacherId == request.auth.uid
+        )) ||
+        isApprovedTeacher() ||
+        isParticipant(resource.data) ||
+        isIdParticipant(requestId)
+      );
+      allow create: if isVerifiedUser() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && request.resource.data.studentId == resource.data.studentId && (
+          (resource.data.studentId == request.auth.uid && (resource.data.status == 'pending' || resource.data.status == 'cancelled')) ||
+          (resource.data.teacherId == request.auth.uid) ||
+          isApprovedTeacher() ||
+          isParticipant(resource.data)
+        ))
+      );
+      allow delete: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && resource.data.studentId == request.auth.uid && resource.data.status == 'pending')
+      );
     }
 
     match /firestore_topic_requests/{requestId} {
-      allow read: if isVerifiedUser() && (isAdmin() || isApprovedTeacher() || isParticipant(resource.data) || isIdParticipant(requestId));
-      allow create: if isVerifiedUser();
-      allow update, delete: if isVerifiedUser() && (isAdmin() || isApprovedTeacher() || isParticipant(resource.data) || isIdParticipant(requestId));
+      allow read: if isVerifiedUser();
+      allow create: if isVerifiedUser() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && request.resource.data.studentId == resource.data.studentId && (
+          resource.data.studentId == request.auth.uid ||
+          isApprovedTeacher()
+        ))
+      );
+      allow delete: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && resource.data.studentId == request.auth.uid) ||
+        isApprovedTeacher()
+      );
     }
 
     match /exam_events/{eventId} {
@@ -317,14 +354,36 @@ match /whiteboards/{whiteboardId} {
     // 6. Comments, Ratings, Transactions
     match /firestore_comments/{commentId} {
       allow read: if true;
-      allow create: if isVerifiedUser();
-      allow update, delete: if isVerifiedUser() && (isParticipant(resource.data) || isIdParticipant(commentId) || isApprovedTeacher());
+      allow create: if isVerifiedUser() && (
+        (request.resource.data.author != null && request.resource.data.author.id == request.auth.uid) ||
+        (request.resource.data.userId != null && request.resource.data.userId == request.auth.uid) ||
+        (request.resource.data.studentId != null && request.resource.data.studentId == request.auth.uid)
+      );
+      allow update, delete: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && (
+          (resource.data.author != null && resource.data.author.id == request.auth.uid) ||
+          (resource.data.userId != null && resource.data.userId == request.auth.uid) ||
+          (resource.data.studentId != null && resource.data.studentId == request.auth.uid)
+        ))
+      );
     }
 
     match /ratings/{ratingId} {
       allow read: if true;
-      allow create: if isVerifiedUser();
-      allow update, delete: if isVerifiedUser() && (isParticipant(resource.data) || isIdParticipant(ratingId) || isApprovedTeacher());
+      allow create: if isVerifiedUser() && (
+        (request.resource.data.userId != null && request.resource.data.userId == request.auth.uid) ||
+        (request.resource.data.author != null && request.resource.data.author.id == request.auth.uid) ||
+        (request.resource.data.studentId != null && request.resource.data.studentId == request.auth.uid)
+      );
+      allow update, delete: if isVerifiedUser() && (
+        isAdmin() ||
+        (resource.data != null && (
+          (resource.data.userId != null && resource.data.userId == request.auth.uid) ||
+          (resource.data.author != null && resource.data.author.id == request.auth.uid) ||
+          (resource.data.studentId != null && resource.data.studentId == request.auth.uid)
+        ))
+      );
     }
 
     match /infinity_transactions/{txId} {
@@ -376,7 +435,17 @@ match /firestore_course_messages/{msgId} {
 
     // 7. Student Data & Logs
     match /student_course_progress/{id} {
-      allow read, write: if isVerifiedUser() && (id.startsWith(request.auth.uid) || isApprovedTeacher());
+      allow read: if isVerifiedUser() && (
+        id.startsWith(request.auth.uid) ||
+        (resource.data != null && resource.data.studentId == request.auth.uid) ||
+        (resource.data != null && isTeacherOfCourse(resource.data.courseId)) ||
+        isAdmin()
+      );
+      allow write: if isVerifiedUser() && (
+        id.startsWith(request.auth.uid) ||
+        (request.resource.data != null && request.resource.data.studentId == request.auth.uid) ||
+        isAdmin()
+      );
     }
 
     match /firestore_agenda_events/{id} {

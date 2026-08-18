@@ -17,7 +17,7 @@ import { useI18n } from '../hooks/useI18n';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import AulaLogo from '../assets/images/aula-logo.png';
+import { OFFICIAL_LOGO_PATH, handleImageError } from '../constants/branding';
 
 export const LoginPage: React.FC = () => {
     const { t } = useI18n();
@@ -291,11 +291,12 @@ export const LoginPage: React.FC = () => {
             <div className="w-full max-w-4xl mx-auto pt-8 sm:pt-0">
                 <Link to={ROUTES.LANDING} className="flex items-center justify-center mb-8 hover:opacity-90 transition-opacity relative z-10 min-h-[60px]">
                     <img 
-                        src={AulaLogo} 
+                        src={OFFICIAL_LOGO_PATH} 
                         alt="AulaInfinity Logo" 
                         className="h-14 md:h-16 w-auto object-contain block bg-white p-2 rounded-xl shadow-md" 
                         referrerPolicy="no-referrer"
                         loading="eager"
+                        onError={(e) => handleImageError(e, 'full')}
                     />
                 </Link>
 

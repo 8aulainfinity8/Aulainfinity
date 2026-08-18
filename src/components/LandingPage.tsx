@@ -7,7 +7,7 @@ import { ROUTES } from '../constants/routes';
 import { useI18n } from '../hooks/useI18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AulaLogo from '../assets/images/aula-logo.png';
+import { OFFICIAL_LOGO_PATH, handleImageError } from '../constants/branding';
 
 const FeatureCard: React.FC<{ icon: React.ReactNode; title: string; description: string }> = React.memo(({ icon, title, description }) => (
     <div className="premium-card p-8 text-center hover:-translate-y-2 duration-300 h-full flex flex-col items-center">
@@ -69,14 +69,15 @@ export const LandingPage: React.FC = () => {
         <div className="bg-gray-50 dark:bg-slate-900 min-h-screen text-slate-900 dark:text-slate-50 overflow-x-hidden">
             {/* Header */}
             <header className="container mx-auto px-6 py-6 flex flex-col sm:flex-row justify-center sm:justify-between items-center gap-6 relative z-50">
-                <div className="flex justify-center w-full sm:w-auto min-h-[56px] min-w-[180px]">
+                <div className="flex justify-center w-full sm:w-auto min-h-[79px]">
                     <img 
-                        src={AulaLogo} 
+                        src={OFFICIAL_LOGO_PATH} 
                         alt="AulaInfinity Logo" 
                         id="landing-header-logo"
-                        className="object-contain block opacity-100 visible bg-white p-2 rounded-xl shadow-sm w-[201.664px] h-[124px]" 
+                        className="h-[79px] w-auto object-contain block opacity-100 visible bg-white p-2 rounded-xl shadow-sm" 
                         referrerPolicy="no-referrer"
                         loading="eager"
+                        onError={(e) => handleImageError(e, 'full')}
                     />
                 </div>
                 <div className="flex items-center justify-center space-x-4 w-full sm:w-auto flex-wrap">
@@ -104,7 +105,16 @@ export const LandingPage: React.FC = () => {
                 <div className="container mx-auto px-6 py-16 md:py-24">
                     <div className="grid md:grid-cols-2 gap-12 items-center">
                         <div className="text-center md:text-left flex flex-col items-center md:items-start">
-                            <AcademicCapIcon className="w-16 h-16 text-primary mx-auto md:mx-0 mb-4"/>
+                            <div className="md:hidden flex justify-center mb-6">
+                                <img 
+                                    src={OFFICIAL_LOGO_PATH} 
+                                    alt="AulaInfinity" 
+                                    className="h-20 w-auto object-contain block bg-white p-2.5 rounded-2xl shadow-sm" 
+                                    referrerPolicy="no-referrer"
+                                    loading="eager"
+                                    onError={(e) => handleImageError(e, 'full')}
+                                />
+                            </div>
                             <h2 className="text-4xl md:text-6xl font-bold mb-4 leading-tight text-slate-900 dark:text-slate-50 text-center md:text-left"
                                 dangerouslySetInnerHTML={{ 
                                     __html: t('landing.title')
@@ -134,9 +144,15 @@ export const LandingPage: React.FC = () => {
                         <div className="hidden md:flex justify-center items-center relative h-96">
                             <div className="absolute w-72 h-72 bg-blue-200 rounded-full opacity-50 blur-xl dark:opacity-30"></div>
                             <div className="absolute w-64 h-64 bg-indigo-200 rounded-full opacity-50 blur-xl right-0 bottom-10 dark:opacity-30"></div>
-                            <div className="relative bg-white/50 dark:bg-slate-800/50 backdrop-blur-lg p-8 rounded-3xl shadow-2xl border border-gray-200/50 dark:border-slate-700/50">
-                                <BookOpenIcon className="w-24 h-24 text-primary" />
-                                <h3 className="mt-4 text-2xl font-bold text-center text-primary">{t('landing.hero_slogan')}</h3>
+                            <div className="relative bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg p-8 rounded-3xl shadow-2xl border border-gray-200/50 dark:border-slate-700/50 flex flex-col items-center justify-center max-w-md">
+                                <img 
+                                    src={OFFICIAL_LOGO_PATH} 
+                                    alt="AulaInfinity" 
+                                    className="w-full max-w-xs sm:max-w-sm h-auto object-contain block bg-white p-4 rounded-2xl shadow-md transition-transform hover:scale-105 duration-300" 
+                                    referrerPolicy="no-referrer"
+                                    loading="eager"
+                                    onError={(e) => handleImageError(e, 'full')}
+                                />
                             </div>
                         </div>
                     </div>
@@ -243,10 +259,11 @@ export const LandingPage: React.FC = () => {
             <footer className="bg-white dark:bg-slate-800 text-center py-8">
                  <div className="flex items-center justify-center mb-4">
                      <img 
-                         src={AulaLogo}
+                         src={OFFICIAL_LOGO_PATH}
                           alt="AulaInfinity Logo" 
                          className="h-10 object-contain bg-white p-1 rounded-lg" 
                          referrerPolicy="no-referrer"
+                         onError={(e) => handleImageError(e, 'full')}
                      />
                 </div>
                 <p className="text-slate-600 dark:text-slate-400">{t('landing.footer_copyright', { year: new Date().getFullYear() })}</p>

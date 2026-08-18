@@ -55,39 +55,18 @@ service firebase.storage {
 
     // 3. Student Private Notes (/notes/{userId}/...)
     match /notes/{userId}/{fileName} {
-      allow read: if isVerifiedUser() && (isOwner(userId) || isApprovedTeacher());
+      allow read: if isVerifiedUser() && (isOwner(userId) || isAdmin());
       allow write: if isVerifiedUser() && (isOwner(userId) || isAdmin()) && maxFileSize(15);
     }
 
-    // 4. Chat Attachments (/chat_attachments/{conversationId}/...)
+    // 4. Chat Attachments (/chat_attachments/{conversationId}/...) - Restricted to Backend Signed URLs
     match /chat_attachments/{conversationId}/{fileName} {
-      allow read: if isVerifiedUser() && (
-        isAdmin() ||
-        isApprovedTeacher() ||
-        conversationId == request.auth.uid ||
-        conversationId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
-        conversationId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
-        conversationId.matches('^' + request.auth.uid + '_.*') ||
-        conversationId.matches('.*_' + request.auth.uid + '$') ||
-        conversationId.matches('.*_' + request.auth.uid + '_.*') ||
-        (!conversationId.matches('.*_[a-zA-Z0-9]+.*') && !conversationId.matches('^direct_.*') && !conversationId.matches('^peer_.*'))
-      );
-      allow write: if isVerifiedUser() && maxFileSize(20) && (
-        isAdmin() ||
-        isApprovedTeacher() ||
-        conversationId == request.auth.uid ||
-        conversationId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
-        conversationId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
-        conversationId.matches('^' + request.auth.uid + '_.*') ||
-        conversationId.matches('.*_' + request.auth.uid + '$') ||
-        conversationId.matches('.*_' + request.auth.uid + '_.*') ||
-        (!conversationId.matches('.*_[a-zA-Z0-9]+.*') && !conversationId.matches('^direct_.*') && !conversationId.matches('^peer_.*'))
-      );
+      allow read, write: if isAdmin();
     }
 
-    // 5. Course Materials (/course_materials/{courseId}/...)
+    // 5. Course Materials (/course_materials/{courseId}/...) - Restricted to Backend Signed URLs for reads
     match /course_materials/{courseId}/{fileName} {
-      allow read: if isVerifiedUser();
+      allow read: if isAdmin();
       allow write: if isApprovedTeacher() && maxFileSize(50);
     }
 
@@ -98,28 +77,11 @@ service firebase.storage {
     }
 
     match /recordings/{courseOrUserId}/{fileName} {
-      allow read: if isVerifiedUser() && (
-        isAdmin() ||
-        isApprovedTeacher() ||
-        courseOrUserId == request.auth.uid ||
-        courseOrUserId.matches('^direct_' + request.auth.uid + '(_.*)?$') ||
-        courseOrUserId.matches('^peer_' + request.auth.uid + '(_.*)?$') ||
-        courseOrUserId.matches('^' + request.auth.uid + '_.*') ||
-        courseOrUserId.matches('.*_' + request.auth.uid + '$') ||
-        courseOrUserId.matches('.*_' + request.auth.uid + '_.*') ||
-        (!courseOrUserId.matches('.*_[a-zA-Z0-9]+.*') && !courseOrUserId.matches('^direct_.*') && !courseOrUserId.matches('^peer_.*'))
-      );
-      allow write: if isApprovedTeacher() && maxFileSize(500);
+      allow read, write: if isAdmin();
     }
 
     match /recordings/{fileName} {
-      allow read: if isVerifiedUser() && (
-        isAdmin() ||
-        isApprovedTeacher() ||
-        fileName.matches('^' + request.auth.uid + '_.*') ||
-        fileName.matches('.*_' + request.auth.uid + '.*')
-      );
-      allow write: if isApprovedTeacher() && maxFileSize(500);
+      allow read, write: if isAdmin();
     }
 
     // 7. Receipts (/receipts/{fileName})

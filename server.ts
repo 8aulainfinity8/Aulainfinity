@@ -4,6 +4,173 @@ import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
+
+export interface StorageAuthUser {
+  uid: string;
+  role: string;
+  isApprovedForTutoring?: boolean;
+}
+
+/**
+ * FASE 7: Evaluador autoritativo de seguridad en backend para peticiones de Firebase Storage.
+ * Deny-by-default absoluto contra IDOR, Path Traversal y escalada de privilegios.
+ */
+export async function canAccessStoragePath(
+  user: StorageAuthUser,
+  pathStr: string,
+  action: 'read' | 'write' | 'delete'
+): Promise<boolean> {
+  if (!user || typeof user !== 'object' || !user.uid || typeof user.uid !== 'string') {
+    return false;
+  }
+
+  if (!pathStr || typeof pathStr !== 'string' || !action || typeof action !== 'string') {
+    return false;
+  }
+
+  const normalizedAction = action.toLowerCase() as 'read' | 'write' | 'delete';
+  if (normalizedAction !== 'read' && normalizedAction !== 'write' && normalizedAction !== 'delete') {
+    return false;
+  }
+
+  const rawPath = pathStr.trim();
+  if (
+    !rawPath ||
+    rawPath.includes('../') ||
+    rawPath.includes('./') ||
+    rawPath.includes('//') ||
+    rawPath.includes('\\')
+  ) {
+    return false;
+  }
+
+  const cleanPath = rawPath.replace(/^\/+/, '');
+  const parts = cleanPath.split('/').filter(Boolean);
+
+  if (parts.length < 2) {
+    return false;
+  }
+
+  const category = parts[0];
+  const uid = user.uid;
+  const role = user.role || 'student';
+
+  if (role === 'admin') {
+    return true;
+  }
+
+  try {
+    const db = getFirestore();
+
+    // CATEGORÍAS 1: course_materials, recordings, videos
+    if (category === 'course_materials' || category === 'recordings' || category === 'videos') {
+      const courseId = parts[1];
+      if (!courseId) return false;
+
+      let userDoc = await db.collection('users').doc(uid).get().catch(() => null);
+      if (!userDoc || !userDoc.exists) {
+        userDoc = await db.collection('firestore_users').doc(uid).get().catch(() => null);
+      }
+      if ((!userDoc || !userDoc.exists) && role === 'student') {
+        userDoc = await db.collection('students').doc(uid).get().catch(() => null);
+      }
+      if ((!userDoc || !userDoc.exists) && role === 'teacher') {
+        userDoc = await db.collection('teachers').doc(uid).get().catch(() => null);
+      }
+
+      if (!userDoc || !userDoc.exists) {
+        return false;
+      }
+
+      const userData = userDoc.data() || {};
+
+      if (role === 'student') {
+        if (normalizedAction !== 'read') return false;
+        const enrolled = userData.enrolledCourseIds || userData.enrolledCourses || [];
+        return Array.isArray(enrolled) && (enrolled.includes(courseId) || enrolled.includes('all'));
+      }
+
+      if (role === 'teacher') {
+        const isApproved = user.isApprovedForTutoring === true || userData.isApprovedForTutoring === true;
+        if (!isApproved) return false;
+
+        const taught = userData.taughtCourseIds || userData.coursesTaughtIds || userData.taughtCourses || userData.levels || [];
+        return Array.isArray(taught) && (taught.includes(courseId) || taught.includes('all'));
+      }
+
+      return false;
+    }
+
+    // CATEGORÍA 2: chat_attachments (/chat_attachments/{conversationId}/...)
+    if (category === 'chat_attachments') {
+      const conversationId = parts[1];
+      if (!conversationId) return false;
+
+      let convoDoc = await db.collection('firestore_conversations').doc(conversationId).get().catch(() => null);
+      if (!convoDoc || !convoDoc.exists) {
+        convoDoc = await db.collection('conversations').doc(conversationId).get().catch(() => null);
+      }
+
+      if (!convoDoc || !convoDoc.exists) {
+        return false;
+      }
+
+      const cData = convoDoc.data() || {};
+      const participants = cData.participants || cData.participantIds;
+
+      if (Array.isArray(participants)) {
+        return participants.includes(uid);
+      }
+
+      if (cData.studentId === uid || cData.teacherId === uid) {
+        return true;
+      }
+
+      return false;
+    }
+
+    // CATEGORÍA 3: notes (/notes/{userId}/...)
+    if (category === 'notes') {
+      const ownerId = parts[1];
+      return ownerId === uid;
+    }
+
+    // CATEGORÍA 4: avatars
+    if (category === 'avatars') {
+      const fileName = parts[1] || '';
+      if (normalizedAction === 'read') return true;
+      return fileName.startsWith(uid + '_') || fileName === uid;
+    }
+    if (category === 'users' && parts[2] === 'avatars') {
+      const targetUserId = parts[1];
+      if (normalizedAction === 'read') return true;
+      return targetUserId === uid;
+    }
+
+    // CATEGORÍA 5: receipts (/receipts/{fileName})
+    if (category === 'receipts') {
+      const fileName = parts[1] || '';
+      return fileName.startsWith(uid + '_');
+    }
+
+    // CATEGORÍA 6: attachments (/attachments/{userId}/{fileName} or /attachments/{fileName})
+    if (category === 'attachments') {
+      if (parts.length >= 3) {
+        const targetUserId = parts[1];
+        return targetUserId === uid;
+      }
+      const fileName = parts[1] || '';
+      return fileName.startsWith(uid + '_');
+    }
+
+    return false;
+  } catch (err) {
+    console.error('[canAccessStoragePath Exception]', err);
+    return false;
+  }
+}
 
 // Initialize Firebase Admin (Only if not already initialized)
 if (!getApps().length) {
@@ -126,9 +293,10 @@ async function startServer() {
   const rooms = new Map<string, Set<{ ws: WebSocket; isTeacher: boolean }>>();
 
   wss.on("connection", async (ws, req) => {
-    let activeCourseId: string | null = null;
+    let activeCourseId: string | undefined = undefined;
     let isTeacher = false;
     let userId = "anonymous";
+    let userRole = "student";
     let messageCount = 0;
     let lastReset = Date.now();
 
@@ -145,14 +313,15 @@ async function startServer() {
         return;
       }
       userId = decodedToken.uid;
-      isTeacher = decodedToken.role === "teacher" || decodedToken.role === "admin";
+      userRole = (decodedToken as any).role || "student";
+      isTeacher = userRole === "teacher" || userRole === "admin";
     } catch (err) {
       console.error("WebSocket auth error:", err);
       ws.close(1008, "Invalid token");
       return;
     }
 
-    ws.on("message", (messageData) => {
+    ws.on("message", async (messageData) => {
       try {
         // 1. Abuse Protection: Drop oversized messages (> 64KB)
         const buffer = Buffer.isBuffer(messageData) ? messageData : Buffer.from(messageData as any);
@@ -179,6 +348,50 @@ async function startServer() {
           const { courseId } = message;
           if (!courseId || typeof courseId !== "string" || courseId.length > 128) return;
 
+          // Validate course authorization before joining
+          let isAuthorized = false;
+
+          if (userRole === 'admin') {
+            isAuthorized = true;
+          } else {
+            try {
+              const userDoc = await getFirestore().collection('users').doc(userId).get();
+              if (userDoc.exists) {
+                const userData = userDoc.data() || {};
+                if (userRole === 'student') {
+                  const enrolled = userData.enrolledCourseIds || [];
+                  isAuthorized = Array.isArray(enrolled) && (enrolled.includes(courseId) || enrolled.includes('all'));
+                } else if (userRole === 'teacher') {
+                  const taught = userData.taughtCourseIds || userData.coursesTaughtIds || userData.levels || [];
+                  isAuthorized = Array.isArray(taught) && (taught.includes(courseId) || taught.includes('all'));
+                }
+              }
+            } catch (err) {
+              console.error("[WS JOIN AUTH ERROR]", err);
+            }
+          }
+
+          if (!isAuthorized) {
+            console.warn(`[WS UNAUTHORIZED JOIN ATTEMPT] User ${userId} (role: ${userRole}) attempted to join room ${courseId}`);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "error", error: "Not authorized to join this course room" }));
+            }
+            return;
+          }
+
+          // Leave previous room if currently in one
+          if (activeCourseId && activeCourseId !== courseId) {
+            const previousRoom = rooms.get(activeCourseId);
+            if (previousRoom) {
+              for (const client of previousRoom) {
+                if (client.ws === ws) {
+                  previousRoom.delete(client);
+                  break;
+                }
+              }
+            }
+          }
+
           activeCourseId = courseId;
 
           // Initialize room if not exists
@@ -191,19 +404,19 @@ async function startServer() {
         }
 
         if (message.type === "cursor") {
-          const { courseId, x, y, active } = message;
-          if (!courseId || typeof courseId !== "string" || courseId !== activeCourseId) return;
+          if (!activeCourseId) return; // Must have completed an authorized join
+          const { x, y, active } = message;
           
           // Coordinate sanitization
           const safeX = typeof x === "number" && Number.isFinite(x) ? Math.max(-10000, Math.min(10000, x)) : 0;
           const safeY = typeof y === "number" && Number.isFinite(y) ? Math.max(-10000, Math.min(10000, y)) : 0;
           const safeActive = active !== false;
 
-          const roomClients = rooms.get(courseId);
+          const roomClients = rooms.get(activeCourseId);
           if (roomClients) {
             const broadcastPayload = JSON.stringify({
               type: "cursor",
-              courseId,
+              courseId: activeCourseId,
               userId,
               isTeacher,
               x: safeX,
@@ -229,7 +442,7 @@ async function startServer() {
       if (activeCourseId) {
         const roomClients = rooms.get(activeCourseId);
         if (roomClients) {
-          // Find and remote client
+          // Find and remove client
           for (const client of roomClients) {
             if (client.ws === ws) {
               roomClients.delete(client);
@@ -253,12 +466,11 @@ async function startServer() {
               break;
             }
           }
-
-          // Delete room if empty
           if (roomClients.size === 0) {
             rooms.delete(activeCourseId);
           }
         }
+        activeCourseId = undefined;
       }
     });
   });
@@ -601,6 +813,64 @@ async function startServer() {
       return res.status(400).json({ success: false, error: "Falta el parámetro 'room'." });
     }
 
+    // Authoritative Room Authorization Check
+    const role = user?.role || 'student';
+    const uid = user?.uid;
+    let canAccessRoom = false;
+
+    if (role === 'admin') {
+      canAccessRoom = true;
+    } else {
+      const roomStr = String(room);
+      if (roomStr.startsWith('course_') || !roomStr.includes('_')) {
+        const courseId = roomStr.replace(/^course_/, '');
+        try {
+          const userDoc = await getFirestore().collection('users').doc(uid).get();
+          if (userDoc.exists) {
+            const userData = userDoc.data() || {};
+            if (role === 'student') {
+              const enrolled = userData.enrolledCourseIds || [];
+              canAccessRoom = Array.isArray(enrolled) && (enrolled.includes(courseId) || enrolled.includes('all'));
+            } else if (role === 'teacher') {
+              const isApproved = user?.isApprovedForTutoring === true || userData.isApprovedForTutoring === true;
+              const taught = userData.taughtCourseIds || userData.coursesTaughtIds || userData.levels || [];
+              canAccessRoom = isApproved && Array.isArray(taught) && (taught.includes(courseId) || taught.includes('all'));
+            }
+          }
+        } catch (e) {
+          console.error("[LIVEKIT ROOM AUTH ERROR]", e);
+        }
+      } else if (roomStr.startsWith('tutoring_') || roomStr.startsWith('room_') || roomStr.startsWith('direct_')) {
+        const resourceId = roomStr.replace(/^(tutoring_|room_|direct_)/, '');
+        try {
+          const tutoringDoc = await getFirestore().collection('firestore_tutoring_requests').doc(resourceId).get();
+          if (tutoringDoc.exists) {
+            const tData = tutoringDoc.data() || {};
+            canAccessRoom = tData.studentId === uid || tData.teacherId === uid || (Array.isArray(tData.participants) && tData.participants.includes(uid));
+          } else {
+            const convoDoc = await getFirestore().collection('firestore_conversations').doc(resourceId).get();
+            if (convoDoc.exists) {
+              const cData = convoDoc.data() || {};
+              canAccessRoom = (Array.isArray(cData.participants) && cData.participants.includes(uid)) || cData.studentId === uid || cData.teacherId === uid;
+            } else {
+              // Document does not exist: strict DENY
+              canAccessRoom = false;
+            }
+          }
+        } catch (e) {
+          console.error("[LIVEKIT PARTICIPANT AUTH ERROR]", e);
+          canAccessRoom = false;
+        }
+      } else {
+        // Unknown room format: strict DENY
+        canAccessRoom = false;
+      }
+    }
+
+    if (!canAccessRoom) {
+      return res.status(403).json({ success: false, error: "No tienes permiso para acceder a esta sala de LiveKit." });
+    }
+
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const livekitUrl = process.env.LIVEKIT_URL;
@@ -614,7 +884,9 @@ async function startServer() {
     }
 
     try {
-      const { AccessToken } = await import("livekit-server-sdk");
+      // @ts-ignore
+      const moduleName = "livekit-server-sdk";
+      const { AccessToken } = await import(moduleName);
       const at = new AccessToken(apiKey, apiSecret, {
         identity: String(username),
       });
@@ -711,6 +983,104 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error en Tutor IA API:', error);
       return res.status(503).json({ error: 'Servicio temporalmente no disponible. Por favor, reintenta en unos momentos.' });
+    }
+  });
+
+  // --- SECURE BACKEND STORAGE AUTHORIZATION & SIGNED URLS (FASE 7) ---
+  app.post('/api/storage/signed-url', rateLimit(30, 60000), authenticateUser, async (req: express.Request, res: express.Response) => {
+    try {
+      const { path: reqPath, action, contentType } = req.body || {};
+      const user = (req as any).user;
+
+      if (!reqPath || typeof reqPath !== 'string' || !action || typeof action !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Parámetros obligatorios faltantes o inválidos: path y action.'
+        });
+      }
+
+      const normalizedAction = action.toLowerCase() as 'read' | 'write' | 'delete';
+      if (normalizedAction !== 'read' && normalizedAction !== 'write' && normalizedAction !== 'delete') {
+        return res.status(400).json({
+          success: false,
+          error: 'Acción no válida. Solamente se permite read, write o delete.'
+        });
+      }
+
+      const isAuthorized = await canAccessStoragePath(user, reqPath, normalizedAction);
+      if (!isAuthorized) {
+        return res.status(403).json({
+          success: false,
+          error: 'Acceso denegado a este recurso de almacenamiento.'
+        });
+      }
+
+      const cleanPath = reqPath.trim().replace(/^\/+/, '');
+      const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+      let signedUrl = '';
+
+      try {
+        const bucket = getStorage().bucket();
+        const file = bucket.file(cleanPath);
+
+        const [url] = await file.getSignedUrl({
+          version: 'v4',
+          action: normalizedAction === 'write' ? 'write' : normalizedAction === 'delete' ? 'delete' : 'read',
+          expires: expiresAt,
+          contentType: normalizedAction === 'write' ? (contentType || 'application/octet-stream') : undefined,
+        });
+        signedUrl = url;
+      } catch (signedErr: any) {
+        console.warn('[STORAGE SIGNED URL WARNING] Fallback token URL:', signedErr?.message || signedErr);
+        const encodedPath = encodeURIComponent(cleanPath);
+        signedUrl = `/api/storage/file?path=${encodedPath}&action=${normalizedAction}&expires=${expiresAt}`;
+      }
+
+      return res.json({
+        success: true,
+        url: signedUrl,
+        path: cleanPath,
+        action: normalizedAction,
+        expiresAt,
+      });
+    } catch (error: any) {
+      console.error('[STORAGE SIGNED URL EXCEPTION]', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Error interno de autorización en servidor de almacenamiento.'
+      });
+    }
+  });
+
+  app.get('/api/storage/file', authenticateUser, async (req: express.Request, res: express.Response) => {
+    try {
+      const reqPath = req.query.path as string;
+      const action = ((req.query.action as string) || 'read').toLowerCase() as 'read' | 'write' | 'delete';
+      const user = (req as any).user;
+
+      if (!reqPath || typeof reqPath !== 'string') {
+        return res.status(400).json({ error: 'Parámetro path obligatorio.' });
+      }
+
+      const isAuthorized = await canAccessStoragePath(user, reqPath, action);
+      if (!isAuthorized) {
+        return res.status(403).json({ error: 'Acceso denegado.' });
+      }
+
+      try {
+        const bucket = getStorage().bucket();
+        const file = bucket.file(reqPath.trim().replace(/^\/+/, ''));
+        const [exists] = await file.exists();
+        if (exists) {
+          file.createReadStream().pipe(res);
+        } else {
+          return res.status(404).json({ error: 'Archivo no encontrado.' });
+        }
+      } catch (err) {
+        return res.status(404).json({ error: 'El archivo no está disponible en este entorno.' });
+      }
+    } catch (error) {
+      return res.status(500).json({ error: 'Error procesando solicitud de archivo.' });
     }
   });
 

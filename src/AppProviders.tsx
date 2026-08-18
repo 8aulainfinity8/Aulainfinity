@@ -14,6 +14,7 @@ import { ConfirmationProvider } from './contexts/ConfirmationContext';
 import { ActiveChatsProvider } from './contexts/ActiveChatsContext';
 import { initFirestoreSync, initAppConfigSync } from './services/firestoreSync';
 import { auth } from './services/firebase';
+import { eventEmitter } from './services/eventService';
 import { FirestoreTestViewer } from './components/FirestoreTestViewer';
 import { RealtimeAlertsBanner } from './components/RealtimeAlertsBanner';
 
@@ -96,7 +97,17 @@ export const AppProviders: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         });
 
-        return () => unsubscribe();
+        // Limpiar la caché de React Query al cerrar sesión para evitar fuga de datos
+        const handleLogout = () => {
+            console.log('[AppProviders] Clearing React Query cache on user logout.');
+            queryClient.clear();
+        };
+        eventEmitter.on('user-logout', handleLogout);
+
+        return () => {
+            unsubscribe();
+            eventEmitter.off('user-logout', handleLogout);
+        };
     }, []);
 
     return (

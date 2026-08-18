@@ -1,10 +1,41 @@
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { storage, db } from './firebase';
+import { storage, db, auth } from './firebase';
 
 export interface UploadProgressCallback {
     (progress: number): void;
 }
+
+/**
+ * Solicitud autorizada de Signed URL al backend para operaciones de almacenamiento privado
+ */
+export const requestStorageSignedUrl = async (params: {
+    path: string;
+    action: 'read' | 'write' | 'delete';
+    contentType?: string;
+}): Promise<string | null> => {
+    try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return null;
+
+        const token = await currentUser.getIdToken();
+        const response = await fetch('/api/storage/signed-url', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(params)
+        });
+
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data?.url || null;
+    } catch (err) {
+        console.warn('[StorageService] Error obteniendo Signed URL del backend:', err);
+        return null;
+    }
+};
 
 export interface VideoMetadataPayload {
     id?: string;

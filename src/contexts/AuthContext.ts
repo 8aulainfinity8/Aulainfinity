@@ -141,6 +141,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             auth.signOut().catch(() => {});
         }
         resetFirestoreSync();
+        eventEmitter.emit('user-logout');
         setUser(null);
     }, [setUser]);
 

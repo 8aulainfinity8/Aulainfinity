@@ -14,8 +14,7 @@ import { useI18n } from '../hooks/useI18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AulaLogo from '../assets/images/aula-logo.png';
-import AulaLogoIcon from '../assets/images/aula-logo-icon.png';
+import { OFFICIAL_ICON_PATH, handleImageError } from '../constants/branding';
 
 interface HeaderProps {
     toggleSidebar: () => void;
@@ -128,12 +127,13 @@ export const Header: React.FC<HeaderProps> = ({ toggleSidebar, openSidebar, side
                     {/* Logo to anchor brand identity (visible on all screens if sidebar is closed/collapsed) */}
                     <Link to={user?.role === 'admin' ? ROUTES.ADMIN_DASHBOARD : ROUTES.DASHBOARD} aria-label="Ir al inicio de AulaInfinity" className="flex items-center hover:opacity-90 active:scale-95 transition-all flex-shrink-0 min-w-[32px] min-h-[32px]">
                         <img 
-                            src={AulaLogoIcon} 
+                            src={OFFICIAL_ICON_PATH} 
                             alt="AulaInfinity Logo" 
                             width="32"
                             height="32"
                             className="h-8 w-8 sm:h-9 sm:w-9 block object-contain transition-colors bg-white rounded-lg shadow-sm"
                             referrerPolicy="no-referrer"
+                            onError={(e) => handleImageError(e, 'icon')}
                         />
                         <span className="ml-2 font-black text-[#0f2a4a] dark:text-white text-sm sm:text-base tracking-tight font-sans hidden sm:inline-block">AulaInfinity</span>
                     </Link>

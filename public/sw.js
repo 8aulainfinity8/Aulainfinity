@@ -5,7 +5,8 @@ const ASSETS_TO_CACHE = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
-  '/icon.svg'
+  '/favicon.png',
+  '/brand/icon.png'
 ];
 
 // Installs assets and pre-caches the main app shell

@@ -8,6 +8,7 @@ import { AuthContext } from './AuthContext';
 import { StudentUser, TeacherUser, TopicRequest, TutoringRequest, Conversation, TeacherPayment, StudentPayment } from '../types';
 import { eventEmitter } from '../services/eventService';
 import { NotificationContext } from './NotificationContext';
+import { AppConfigContext } from './AppConfigContext';
 
 import { isTeacherMatchForSubject, isTutoringRequestForTeacher } from '../utils/tutoringHelpers';
 
@@ -19,10 +20,18 @@ const SEEN_TEACHERS_KEY = 'seenTeacherUserIds';
 export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user } = useContext(AuthContext);
   const { addToast } = useContext(NotificationContext);
+  const { appConfig } = useContext(AppConfigContext);
   const [newUsersCount, setNewUsersCount] = useState(0);
   const [newSubscriptionsCount, setNewSubscriptionsCount] = useState(0);
   const [newStudentsCount, setNewStudentsCount] = useState(0);
   const [newTeachersCount, setNewTeachersCount] = useState(0);
+
+  // Refs to hold the latest reactive state for background checks (avoiding interval recreation/multiple queries)
+  const usersRef = useRef<StudentUser[] | undefined>(undefined);
+  const teachersRef = useRef<TeacherUser[] | undefined>(undefined);
+  const tutoringRequestsRef = useRef<TutoringRequest[] | undefined>(undefined);
+  const agendaEventsRef = useRef<any[] | undefined>(undefined);
+  const appConfigRef = useRef<any>(undefined);
 
   // Refs to store previous counts for notification logic
   const prevTopicRequestsCount = useRef<number | null>(null);
@@ -38,6 +47,12 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
   const { data: teachers, refetch: refetchTeachers } = useQuery<TeacherUser[]>({
     queryKey: ['teachers'],
     queryFn: api.fetchTeachers,
+    enabled: user?.role === 'admin' || user?.role === 'teacher',
+  });
+
+  const { data: agendaEvents, refetch: refetchAgendaEvents } = useQuery<any[]>({
+    queryKey: ['adminAgendaEvents'],
+    queryFn: () => api.fetchAgendaEvents(),
     enabled: user?.role === 'admin' || user?.role === 'teacher',
   });
 
@@ -104,6 +119,7 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
     let messageTimer: any = null;
     let teacherPayTimer: any = null;
     let studentPayTimer: any = null;
+    let agendaTimer: any = null;
 
     const handleUserUpdate = () => { 
       if (user.role === 'admin' || user.role === 'teacher') {
@@ -153,6 +169,14 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
         }, 500);
       }
     };
+    const handleAgendaUpdate = () => {
+      if (user.role === 'admin' || user.role === 'teacher') {
+        if (agendaTimer) clearTimeout(agendaTimer);
+        agendaTimer = setTimeout(() => {
+          refetchAgendaEvents();
+        }, 500);
+      }
+    };
     
     eventEmitter.on('user-update', handleUserUpdate);
     eventEmitter.on('user-deleted', handleUserUpdate);
@@ -168,6 +192,7 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
     eventEmitter.on('subscription-update', handleTeacherPaymentUpdate); // Subscriptions can trigger state changes
     eventEmitter.on('student-payment-created', handleStudentPaymentUpdate);
     eventEmitter.on('student-payments-updated', handleStudentPaymentUpdate);
+    eventEmitter.on('agenda-updated', handleAgendaUpdate);
 
     // Cleanup listeners on unmount
     return () => {
@@ -177,6 +202,7 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
       if (messageTimer) clearTimeout(messageTimer);
       if (teacherPayTimer) clearTimeout(teacherPayTimer);
       if (studentPayTimer) clearTimeout(studentPayTimer);
+      if (agendaTimer) clearTimeout(agendaTimer);
 
       eventEmitter.off('user-update', handleUserUpdate);
       eventEmitter.off('user-deleted', handleUserUpdate);
@@ -192,8 +218,9 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
       eventEmitter.off('subscription-update', handleTeacherPaymentUpdate);
       eventEmitter.off('student-payment-created', handleStudentPaymentUpdate);
       eventEmitter.off('student-payments-updated', handleStudentPaymentUpdate);
+      eventEmitter.off('agenda-updated', handleAgendaUpdate);
     };
-  }, [user, refetchUsers, refetchTeachers, refetchTopicRequests, refetchTutoringRequests, refetchConversations, refetchTeacherPayments, refetchStudentPayments]);
+  }, [user, refetchUsers, refetchTeachers, refetchTopicRequests, refetchTutoringRequests, refetchConversations, refetchTeacherPayments, refetchStudentPayments, refetchAgendaEvents]);
 
 
   const pendingTopicRequestsCount = useMemo(() => {
@@ -304,33 +331,39 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
         }
     }, [pendingTutoringRequestsCount, user, addToast]);
 
+    // Sync reactive state to refs to prevent background timer re-evaluation/looping
+    useEffect(() => {
+        usersRef.current = users;
+    }, [users]);
+
+    useEffect(() => {
+        teachersRef.current = teachers;
+    }, [teachers]);
+
+    useEffect(() => {
+        tutoringRequestsRef.current = tutoringRequests;
+    }, [tutoringRequests]);
+
+    useEffect(() => {
+        agendaEventsRef.current = agendaEvents;
+    }, [agendaEvents]);
+
+    useEffect(() => {
+        appConfigRef.current = appConfig || undefined;
+    }, [appConfig]);
+
     // Background checker to dispatch automated WhatsApp notifications exactly 30 minutes before scheduled agenda events & tutoring sessions
     useEffect(() => {
-        if (!user) return;
+        const role = user?.role;
+        if (!user || (role !== 'admin' && role !== 'teacher')) return;
 
         const checkWhatsAppAlerts = async () => {
             const now = Date.now();
-            let config: any = null;
-            let allUsers: StudentUser[] = [];
-            let allTeachers: TeacherUser[] = [];
-
-            try {
-                config = await api.fetchAppConfig();
-            } catch (err) {
-                console.error("Error fetching config inside WhatsApp checker:", err);
-            }
-
-            try {
-                allUsers = await api.fetchUsers();
-            } catch (err) {
-                console.error("Error fetching users for WhatsApp alert:", err);
-            }
-
-            try {
-                allTeachers = await api.fetchTeachers();
-            } catch (err) {
-                console.error("Error fetching teachers for WhatsApp alert:", err);
-            }
+            const config = appConfigRef.current;
+            const currentUsers = usersRef.current || [];
+            const currentTeachers = teachersRef.current || [];
+            const currentTutoringRequests = tutoringRequestsRef.current || [];
+            const currentAgendaEvents = agendaEventsRef.current || [];
 
             const mode = config?.whatsappMode || 'direct';
             const adminPhone = config?.supportPhone || config?.adminPhone || '';
@@ -347,8 +380,8 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
             };
 
             // 1. Check Tutoring Requests (Confirmed)
-            if (tutoringRequests && tutoringRequests.length > 0) {
-                for (const req of tutoringRequests) {
+            if (currentTutoringRequests && currentTutoringRequests.length > 0) {
+                for (const req of currentTutoringRequests) {
                     if (req.status !== 'confirmed' || req.whatsappSent || !req.date || !req.time) continue;
 
                     try {
@@ -360,12 +393,12 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
                         if (diffMinutes > -15 && diffMinutes <= 30) {
                             await api.updateTutoringWhatsappSent(req.id);
 
-                            const studentUser = allUsers.find(u => u.id === req.studentId);
+                            const studentUser = currentUsers.find(u => u.id === req.studentId);
                             const studentPhone = studentUser?.phone || '';
 
                             let teacherPhone = '';
                             if (req.teacherId) {
-                                const teacherUser = allTeachers.find(t => t.id === req.teacherId);
+                                const teacherUser = currentTeachers.find(t => t.id === req.teacherId);
                                 if (teacherUser) teacherPhone = teacherUser.phone;
                             }
 
@@ -406,8 +439,7 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
 
             // 2. Check Agenda Events (Exams, Assignments, Class Events)
             try {
-                const agendaEvents = await api.fetchAgendaEvents();
-                for (const ev of agendaEvents) {
+                for (const ev of currentAgendaEvents) {
                     if (ev.whatsappSent || !ev.date) continue;
 
                     try {
@@ -420,13 +452,13 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
                         if (diffMinutes > -15 && diffMinutes <= 30) {
                             await api.updateAgendaEvent(ev.id, { whatsappSent: true });
 
-                            const studentUser = allUsers.find(u => u.id === ev.studentId);
+                            const studentUser = currentUsers.find(u => u.id === ev.studentId);
                             const studentPhone = studentUser?.phone || '';
 
                             let teacherPhone = '';
                             let teacherName = '';
                             if (studentUser?.assignedTeacherId) {
-                                const teacherUser = allTeachers.find(t => t.id === studentUser.assignedTeacherId);
+                                const teacherUser = currentTeachers.find(t => t.id === studentUser.assignedTeacherId);
                                 if (teacherUser) {
                                     teacherPhone = teacherUser.phone;
                                     teacherName = teacherUser.name;
@@ -467,14 +499,14 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
                     }
                 }
             } catch (err) {
-                console.error("Error fetching agenda events in WhatsApp checker:", err);
+                console.error("Error checking agenda events in WhatsApp checker:", err);
             }
         };
 
         checkWhatsAppAlerts();
         const alarmInterval = setInterval(checkWhatsAppAlerts, 30000);
         return () => clearInterval(alarmInterval);
-    }, [tutoringRequests, user, addToast]);
+    }, [user?.id, user?.role, addToast]);
 
 
   useEffect(() => {

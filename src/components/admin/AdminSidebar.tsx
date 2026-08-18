@@ -26,6 +26,7 @@ import {
 import { ROUTES } from '../../constants/routes';
 import { ConfirmationModal } from '../ConfirmationModal';
 import { useI18n } from '../../hooks/useI18n';
+import { OFFICIAL_LOGO_PATH, OFFICIAL_ICON_PATH, handleImageError } from '../../constants/branding';
 
 interface AdminSidebarProps {
   sidebarState: 'open' | 'collapsed' | 'closed';
@@ -155,11 +156,29 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarState, onItem
   return (
     <>
         <aside className={`sidebar-container bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 border-r border-gray-200 dark:border-slate-700 shadow-lg flex flex-col fixed h-full z-[100] transition-all duration-300 ${sidebarWidth} ${transformClass} overflow-y-auto pb-28 md:pb-4`}>
-            <div className="flex items-center justify-center p-3 border-b border-gray-200 dark:border-slate-700 h-16 flex-shrink-0">
-                <UserCircleIcon className="w-8 h-8 text-primary" />
-                <h1 className={`text-xl font-bold ml-2 text-primary transition-all duration-200 whitespace-nowrap ${isSidebarOpen ? 'opacity-100' : 'w-0 opacity-0'}`}>
-                    {isTeacher ? t('roles.teacher') : t('roles.admin')}
-                </h1>
+            <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0 bg-white dark:bg-slate-800">
+                {isSidebarOpen ? (
+                    <div className="flex items-center justify-between w-full">
+                        <img 
+                            src={OFFICIAL_LOGO_PATH} 
+                            alt="AulaInfinity Logo" 
+                            className="h-9 object-contain bg-white rounded-lg p-1" 
+                            referrerPolicy="no-referrer"
+                            onError={(e) => handleImageError(e, 'full')}
+                        />
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-primary/10 text-primary rounded-full uppercase tracking-wider">
+                            {isTeacher ? t('roles.teacher') : t('roles.admin')}
+                        </span>
+                    </div>
+                ) : (
+                    <img 
+                        src={OFFICIAL_ICON_PATH} 
+                        alt="AulaInfinity Icon" 
+                        className="w-8 h-8 rounded-full border shadow-sm object-contain p-1 border-indigo-150 bg-white" 
+                        referrerPolicy="no-referrer"
+                        onError={(e) => handleImageError(e, 'icon')}
+                    />
+                )}
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto flex flex-col scrollbar-thin scrollbar-thumb-slate-200">

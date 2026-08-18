@@ -802,6 +802,7 @@ export const initFirestoreSync = () => {
         const coursesRef = collection(db, 'courses');
         onSnapshot(coursesRef, (snapshot: any) => {
             let hasChanges = false;
+            const isFirst = isFirstCoursesSnapshot;
             if (isFirstCoursesSnapshot) {
                 if (dbMock.coursesData) {
                     dbMock.coursesData.length = 0; // Clear mock data
@@ -841,7 +842,7 @@ export const initFirestoreSync = () => {
                     }
                 }
             });
-            if (hasChanges) {
+            if (hasChanges && !isFirst) {
                 eventEmitter.emit('courses-updated', dbMock.coursesData);
             }
         }, (err: any) => handleSyncError('Firestore courses sync:', err));
@@ -933,8 +934,11 @@ export const initFirestoreSync = () => {
         }, (err: any) => handleSyncError('Firestore user doc sync:', err));
 
         // 12b. Students sync (students collection)
+        let isFirstStudentsSnapshot = true;
         const studentsRef = collection(db, 'students');
         onSnapshot(studentsRef, (snapshot: any) => {
+            const isFirst = isFirstStudentsSnapshot;
+            isFirstStudentsSnapshot = false;
             snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const userId = data.id || data.uid || change.doc.id;
@@ -950,7 +954,9 @@ export const initFirestoreSync = () => {
                         dbMock.studentsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.studentsData[idx], ...normalizedData } as any) || normalizedData;
                     }
                     eventEmitter.emit('user-updated', userId);
-                    eventEmitter.emit('user-update', normalizedData);
+                    if (!isFirst) {
+                        eventEmitter.emit('user-update', normalizedData);
+                    }
                 } else if (change.type === 'removed') {
                     dbMock.dbPurgeUserFromMemory(userId);
                     if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
@@ -960,8 +966,11 @@ export const initFirestoreSync = () => {
         }, (err: any) => handleSyncError('Firestore students collection sync:', err));
 
         // 12c. Teachers sync (teachers collection)
+        let isFirstTeachersSnapshot = true;
         const teachersRef = collection(db, 'teachers');
         onSnapshot(teachersRef, (snapshot: any) => {
+            const isFirst = isFirstTeachersSnapshot;
+            isFirstTeachersSnapshot = false;
             snapshot.docChanges().forEach((change: any) => {
                 const data = change.doc.data() || {};
                 const userId = data.id || data.uid || change.doc.id;
@@ -977,7 +986,9 @@ export const initFirestoreSync = () => {
                         dbMock.teachersData[idx] = dbMock.normalizeAnyUser({ ...dbMock.teachersData[idx], ...normalizedData } as any) || normalizedData;
                     }
                     eventEmitter.emit('user-updated', userId);
-                    eventEmitter.emit('user-update', normalizedData);
+                    if (!isFirst) {
+                        eventEmitter.emit('user-update', normalizedData);
+                    }
                 } else if (change.type === 'removed') {
                     dbMock.dbPurgeUserFromMemory(userId);
                     if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
@@ -987,9 +998,12 @@ export const initFirestoreSync = () => {
         }, (err: any) => handleSyncError('Firestore teachers collection sync:', err));
 
         // 12d. Admins sync (admins collection)
+        let isFirstAdminsSnapshot = true;
         if (currentUserObj?.role === 'admin') {
             const adminsRef = collection(db, 'admins');
             onSnapshot(adminsRef, (snapshot: any) => {
+                const isFirst = isFirstAdminsSnapshot;
+                isFirstAdminsSnapshot = false;
                 snapshot.docChanges().forEach((change: any) => {
                     const data = change.doc.data() || {};
                     const userId = data.id || data.uid || change.doc.id;
@@ -1005,7 +1019,9 @@ export const initFirestoreSync = () => {
                             dbMock.adminsData[idx] = dbMock.normalizeAnyUser({ ...dbMock.adminsData[idx], ...normalizedData } as any) || normalizedData;
                         }
                         eventEmitter.emit('user-updated', userId);
-                        eventEmitter.emit('user-update', normalizedData);
+                        if (!isFirst) {
+                            eventEmitter.emit('user-update', normalizedData);
+                        }
                     } else if (change.type === 'removed') {
                         dbMock.dbPurgeUserFromMemory(userId);
                         if (data.email) dbMock.dbPurgeUserFromMemory(data.email);
