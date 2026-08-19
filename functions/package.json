@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
-    "build": "esbuild index.ts --outfile=index.js --platform=node --target=node20 --format=cjs --packages=external",
+    "build": "esbuild index.ts --outfile=index.js --platform=node --target=node22 --format=cjs --packages=external",
     "predeploy": "npm run build",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
@@ -11,7 +11,7 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
