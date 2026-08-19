@@ -3,6 +3,7 @@
  */
 
 import * as functions from "firebase-functions";
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import * as admin from 'firebase-admin';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 
@@ -19,8 +20,15 @@ const systemInstruction = "Si generas contenido que involucre dinero, debes usar
  * Función para sincronizar de forma segura el rol de usuario con Custom Claims.
  * Evita la escalación de privilegios impidiendo que cambios del cliente otorguen roles privilegiados o aprobación de tutoría.
  */
-export const syncUserRole = functions.region("europe-west1").firestore.document("firestore_users/{userId}").onWrite(async (change, context) => {
-  const userId = context.params.userId;
+export const syncUserRole = onDocumentWritten(
+  {
+    region: "europe-west1",
+    database: "ai-studio-aulainfinity-6be7791f-ef3e-4fc4-b45b-98918b1b57ca",
+    document: "firestore_users/{userId}"
+  },
+  async (event) => {
+    const change = event.data;
+    const userId = event.params.userId;
   const newData = change.after.exists ? change.after.data() : null;
   const oldData = change.before.exists ? change.before.data() : null;
 

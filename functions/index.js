@@ -35,6 +35,7 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 var functions = __toESM(require("firebase-functions"));
+var import_firestore = require("firebase-functions/v2/firestore");
 var admin = __toESM(require("firebase-admin"));
 var import_genai = require("@google/genai");
 if (!admin.apps.length) {
@@ -42,72 +43,80 @@ if (!admin.apps.length) {
 }
 const getAi = () => new import_genai.GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || functions.config().gemini?.key || "" });
 const systemInstruction = "Si generas contenido que involucre dinero, debes usar Euros (\u20AC) como la moneda. Para cualquier notaci\xF3n matem\xE1tica, no uses LaTeX delimitado (como $...$ o \\(...\\)). En su lugar, usa caracteres Unicode (por ejemplo, x\xB2, \u221A2, \u2260) o MathML cuando sea apropiado para f\xF3rmulas complejas.";
-const syncUserRole = functions.region("europe-west1").firestore.document("firestore_users/{userId}").onWrite(async (change, context) => {
-  const userId = context.params.userId;
-  const newData = change.after.exists ? change.after.data() : null;
-  const oldData = change.before.exists ? change.before.data() : null;
-  try {
-    let userRecord;
+const syncUserRole = (0, import_firestore.onDocumentWritten)(
+  {
+    region: "europe-west1",
+    database: "ai-studio-aulainfinity-6be7791f-ef3e-4fc4-b45b-98918b1b57ca",
+    document: "firestore_users/{userId}"
+  },
+  async (event) => {
+    const change = event.data;
+    const userId = event.params.userId;
+    const newData = change.after.exists ? change.after.data() : null;
+    const oldData = change.before.exists ? change.before.data() : null;
     try {
-      userRecord = await admin.auth().getUser(userId);
-    } catch (authError) {
-      if (authError.code === "auth/user-not-found") {
-        console.log(`[syncUserRole] Usuario ${userId} no existe en Auth.`);
+      let userRecord;
+      try {
+        userRecord = await admin.auth().getUser(userId);
+      } catch (authError) {
+        if (authError.code === "auth/user-not-found") {
+          console.log(`[syncUserRole] Usuario ${userId} no existe en Auth.`);
+          return;
+        }
+        throw authError;
+      }
+      const existingClaims = userRecord.customClaims || {};
+      if (!newData) {
+        console.log(`[syncUserRole] Documento firestore_users/${userId} eliminado. Revocando claims privilegiadas.`);
+        const cleanedClaims = {
+          ...existingClaims,
+          role: "student",
+          isAdmin: false,
+          isApprovedForTutoring: false
+        };
+        await admin.auth().setCustomUserClaims(userId, cleanedClaims);
         return;
       }
-      throw authError;
-    }
-    const existingClaims = userRecord.customClaims || {};
-    if (!newData) {
-      console.log(`[syncUserRole] Documento firestore_users/${userId} eliminado. Revocando claims privilegiadas.`);
-      const cleanedClaims = {
+      let targetRole = newData.role || "student";
+      let isApprovedForTutoring = Boolean(newData.isApprovedForTutoring);
+      let isAdmin = Boolean(newData.isAdmin);
+      const wasAdmin = oldData?.role === "admin" || oldData?.isAdmin === true || existingClaims.role === "admin";
+      const wasTeacher = oldData?.role === "teacher" || existingClaims.role === "teacher" || wasAdmin;
+      const wasApproved = oldData?.isApprovedForTutoring === true || existingClaims.isApprovedForTutoring === true || wasAdmin;
+      if (targetRole === "admin" || isAdmin) {
+        if (!wasAdmin) {
+          console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a admin para ${userId}`);
+          targetRole = oldData?.role || existingClaims.role || "student";
+          isAdmin = false;
+        } else {
+          isAdmin = true;
+        }
+      }
+      if (targetRole === "teacher") {
+        if (!wasTeacher) {
+          console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a teacher para ${userId}. Debe ser aprobada por admin.`);
+          targetRole = oldData?.role || existingClaims.role || "student";
+        }
+      }
+      if (targetRole === "teacher" && isApprovedForTutoring) {
+        if (!wasApproved) {
+          console.warn(`[syncUserRole] Bloqueada auto-aprobaci\xF3n de tutor\xEDa para ${userId}`);
+          isApprovedForTutoring = false;
+        }
+      }
+      const updatedClaims = {
         ...existingClaims,
-        role: "student",
-        isAdmin: false,
-        isApprovedForTutoring: false
+        role: targetRole,
+        isAdmin: targetRole === "admin" || isAdmin,
+        isApprovedForTutoring: targetRole === "admin" ? true : targetRole === "teacher" ? isApprovedForTutoring : false
       };
-      await admin.auth().setCustomUserClaims(userId, cleanedClaims);
-      return;
+      await admin.auth().setCustomUserClaims(userId, updatedClaims);
+      console.log(`[syncUserRole] Custom claims actualizados con \xE9xito para ${userId}:`, updatedClaims);
+    } catch (err) {
+      console.error(`[syncUserRole] Error al actualizar custom claims para ${userId}:`, err);
     }
-    let targetRole = newData.role || "student";
-    let isApprovedForTutoring = Boolean(newData.isApprovedForTutoring);
-    let isAdmin = Boolean(newData.isAdmin);
-    const wasAdmin = oldData?.role === "admin" || oldData?.isAdmin === true || existingClaims.role === "admin";
-    const wasTeacher = oldData?.role === "teacher" || existingClaims.role === "teacher" || wasAdmin;
-    const wasApproved = oldData?.isApprovedForTutoring === true || existingClaims.isApprovedForTutoring === true || wasAdmin;
-    if (targetRole === "admin" || isAdmin) {
-      if (!wasAdmin) {
-        console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a admin para ${userId}`);
-        targetRole = oldData?.role || existingClaims.role || "student";
-        isAdmin = false;
-      } else {
-        isAdmin = true;
-      }
-    }
-    if (targetRole === "teacher") {
-      if (!wasTeacher) {
-        console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a teacher para ${userId}. Debe ser aprobada por admin.`);
-        targetRole = oldData?.role || existingClaims.role || "student";
-      }
-    }
-    if (targetRole === "teacher" && isApprovedForTutoring) {
-      if (!wasApproved) {
-        console.warn(`[syncUserRole] Bloqueada auto-aprobaci\xF3n de tutor\xEDa para ${userId}`);
-        isApprovedForTutoring = false;
-      }
-    }
-    const updatedClaims = {
-      ...existingClaims,
-      role: targetRole,
-      isAdmin: targetRole === "admin" || isAdmin,
-      isApprovedForTutoring: targetRole === "admin" ? true : targetRole === "teacher" ? isApprovedForTutoring : false
-    };
-    await admin.auth().setCustomUserClaims(userId, updatedClaims);
-    console.log(`[syncUserRole] Custom claims actualizados con \xE9xito para ${userId}:`, updatedClaims);
-  } catch (err) {
-    console.error(`[syncUserRole] Error al actualizar custom claims para ${userId}:`, err);
   }
-});
+);
 const adminSetUserClaims = functions.region("europe-west1").https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "Se requiere autenticaci\xF3n.");

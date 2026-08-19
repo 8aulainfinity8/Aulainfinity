@@ -3,6 +3,7 @@
     "source": "functions"
   },
   "firestore": {
+    "database": "ai-studio-aulainfinity-6be7791f-ef3e-4fc4-b45b-98918b1b57ca",
     "rules": "firestore.rules"
   },
   "storage": {
