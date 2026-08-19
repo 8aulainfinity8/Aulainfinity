@@ -1,228 +1,228 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const { GoogleGenAI, Type } = require("@google/genai");
-
-// --- INITIALIZATION ---
-
-admin.initializeApp();
-const db = admin.firestore();
-
-// It's best practice to store API keys in environment variables.
-// In Firebase, you can set this using the command:
-// firebase functions:config:set gemini.key="YOUR_API_KEY"
-const API_KEY = functions.config().gemini.key;
-
-if (!API_KEY) {
-  console.error("Gemini API Key is not set in Firebase Functions config.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-const model = "gemini-2.5-flash";
-
-// --- HELPER FUNCTIONS ---
-
-const checkAuth = (context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
-          "unauthenticated",
-          "The function must be called while authenticated."
-        );
-    }
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
-
-// --- CALLABLE CLOUD FUNCTIONS ---
-
-/**
- * AI Tutor Chat: Securely gets a response from the AI tutor.
- */
-exports.askTutor = functions.https.onCall(async (data, context) => {
-  checkAuth(context);
-  const { history, image, vibe } = data;
-
-  if (!Array.isArray(history)) {
-    throw new functions.https.HttpsError("invalid-argument", "The function requires a 'history' array.");
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
-  
-  const contents = history.map(msg => ({
-    role: msg.role === 'user' ? 'user' : 'model',
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var index_exports = {};
+__export(index_exports, {
+  adminSetUserClaims: () => adminSetUserClaims,
+  callSimpleAI: () => callSimpleAI,
+  callTutorAI: () => callTutorAI,
+  syncUserRole: () => syncUserRole
+});
+module.exports = __toCommonJS(index_exports);
+var functions = __toESM(require("firebase-functions"));
+var admin = __toESM(require("firebase-admin"));
+var import_genai = require("@google/genai");
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const getAi = () => new import_genai.GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || functions.config().gemini?.key || "" });
+const systemInstruction = "Si generas contenido que involucre dinero, debes usar Euros (\u20AC) como la moneda. Para cualquier notaci\xF3n matem\xE1tica, no uses LaTeX delimitado (como $...$ o \\(...\\)). En su lugar, usa caracteres Unicode (por ejemplo, x\xB2, \u221A2, \u2260) o MathML cuando sea apropiado para f\xF3rmulas complejas.";
+const syncUserRole = functions.region("europe-west1").firestore.document("firestore_users/{userId}").onWrite(async (change, context) => {
+  const userId = context.params.userId;
+  const newData = change.after.exists ? change.after.data() : null;
+  const oldData = change.before.exists ? change.before.data() : null;
+  try {
+    let userRecord;
+    try {
+      userRecord = await admin.auth().getUser(userId);
+    } catch (authError) {
+      if (authError.code === "auth/user-not-found") {
+        console.log(`[syncUserRole] Usuario ${userId} no existe en Auth.`);
+        return;
+      }
+      throw authError;
+    }
+    const existingClaims = userRecord.customClaims || {};
+    if (!newData) {
+      console.log(`[syncUserRole] Documento firestore_users/${userId} eliminado. Revocando claims privilegiadas.`);
+      const cleanedClaims = {
+        ...existingClaims,
+        role: "student",
+        isAdmin: false,
+        isApprovedForTutoring: false
+      };
+      await admin.auth().setCustomUserClaims(userId, cleanedClaims);
+      return;
+    }
+    let targetRole = newData.role || "student";
+    let isApprovedForTutoring = Boolean(newData.isApprovedForTutoring);
+    let isAdmin = Boolean(newData.isAdmin);
+    const wasAdmin = oldData?.role === "admin" || oldData?.isAdmin === true || existingClaims.role === "admin";
+    const wasTeacher = oldData?.role === "teacher" || existingClaims.role === "teacher" || wasAdmin;
+    const wasApproved = oldData?.isApprovedForTutoring === true || existingClaims.isApprovedForTutoring === true || wasAdmin;
+    if (targetRole === "admin" || isAdmin) {
+      if (!wasAdmin) {
+        console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a admin para ${userId}`);
+        targetRole = oldData?.role || existingClaims.role || "student";
+        isAdmin = false;
+      } else {
+        isAdmin = true;
+      }
+    }
+    if (targetRole === "teacher") {
+      if (!wasTeacher) {
+        console.warn(`[syncUserRole] Bloqueada escalaci\xF3n no autorizada a teacher para ${userId}. Debe ser aprobada por admin.`);
+        targetRole = oldData?.role || existingClaims.role || "student";
+      }
+    }
+    if (targetRole === "teacher" && isApprovedForTutoring) {
+      if (!wasApproved) {
+        console.warn(`[syncUserRole] Bloqueada auto-aprobaci\xF3n de tutor\xEDa para ${userId}`);
+        isApprovedForTutoring = false;
+      }
+    }
+    const updatedClaims = {
+      ...existingClaims,
+      role: targetRole,
+      isAdmin: targetRole === "admin" || isAdmin,
+      isApprovedForTutoring: targetRole === "admin" ? true : targetRole === "teacher" ? isApprovedForTutoring : false
+    };
+    await admin.auth().setCustomUserClaims(userId, updatedClaims);
+    console.log(`[syncUserRole] Custom claims actualizados con \xE9xito para ${userId}:`, updatedClaims);
+  } catch (err) {
+    console.error(`[syncUserRole] Error al actualizar custom claims para ${userId}:`, err);
+  }
+});
+const adminSetUserClaims = functions.region("europe-west1").https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Se requiere autenticaci\xF3n.");
+  }
+  const callerClaims = context.auth.token || {};
+  const isCallerAdmin = callerClaims.role === "admin";
+  if (!isCallerAdmin) {
+    console.warn(`[adminSetUserClaims] Intento de acceso no autorizado por UID: ${context.auth.uid}`);
+    throw new functions.https.HttpsError("permission-denied", "Solo un administrador con claim verificado puede modificar permisos de usuario.");
+  }
+  const { targetUid, role, isApprovedForTutoring, isAdmin } = data;
+  if (!targetUid || !role) {
+    throw new functions.https.HttpsError("invalid-argument", "Se requiere targetUid y role.");
+  }
+  if (!["student", "teacher", "admin"].includes(role)) {
+    throw new functions.https.HttpsError("invalid-argument", "Rol inv\xE1lido especificado.");
+  }
+  try {
+    const userRecord = await admin.auth().getUser(targetUid);
+    const existingClaims = userRecord.customClaims || {};
+    const newClaims = {
+      ...existingClaims,
+      role,
+      isAdmin: role === "admin" || Boolean(isAdmin),
+      isApprovedForTutoring: role === "admin" ? true : role === "teacher" ? Boolean(isApprovedForTutoring) : false
+    };
+    await admin.auth().setCustomUserClaims(targetUid, newClaims);
+    console.log(`[adminSetUserClaims] Admin ${context.auth.uid} actualiz\xF3 claims para ${targetUid}:`, newClaims);
+    const db = admin.firestore();
+    const updateData = {
+      role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByAdminUid: context.auth.uid
+    };
+    if (role === "teacher") {
+      updateData.isApprovedForTutoring = Boolean(isApprovedForTutoring);
+    }
+    if (role === "admin") {
+      updateData.isAdmin = true;
+      updateData.isApprovedForTutoring = true;
+    }
+    await db.collection("firestore_users").doc(targetUid).set(updateData, { merge: true });
+    await db.collection("users").doc(targetUid).set(updateData, { merge: true });
+    return { success: true, targetUid, claims: newClaims, updatedBy: context.auth.uid };
+  } catch (err) {
+    console.error("[adminSetUserClaims] Error:", err);
+    throw new functions.https.HttpsError("internal", err.message || "Error al actualizar permisos.");
+  }
+});
+const callTutorAI = functions.region("europe-west1").https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "El usuario debe estar autenticado para usar el Tutor IA.");
+  }
+  const history = data.history;
+  const image = data.image;
+  if (!history || !Array.isArray(history)) {
+    throw new functions.https.HttpsError("invalid-argument", "El historial del chat es requerido.");
+  }
+  const formattedHistory = history.slice(0, -1).map((msg) => ({
+    role: msg.role,
     parts: [{ text: msg.text }]
   }));
-
-  if (image && image.mimeType && image.data) {
-    const lastUserMessage = contents[contents.length - 1];
-    if (lastUserMessage && lastUserMessage.role === 'user') {
-        lastUserMessage.parts.push({
-            inlineData: { mimeType: image.mimeType, data: image.data }
-        });
-    }
-  }
-
-  const selectedVibe = vibe || 'socratic';
-  const systemInstructions = {
-    'socratic': "Actúa como tutor socrático: guía con preguntas cortas de forma incremental, no des la respuesta directa de inmediato al estudiante para que él mismo la deduzca.",
-    'explanatory': "Actúa como tutor explicativo: enfócate primordialmente en analogías de la vida diaria, metáforas cotidianas y explicaciones sencillas e incrementales con ejemplos prácticos.",
-    'ebau': "Actúa como tutor de preparación EBAU (Selectividad de España): máximo rigor académico, cita teoremas, sigue los criterios de corrección reales de selectividad y advierte sobre errores comunes."
-  };
-
-  const baseInstruction = systemInstructions[selectedVibe] || systemInstructions['socratic'];
-  const fullInstruction = `${baseInstruction} Responde en español de forma amable y estructurada. No uses LaTeX delimitado (como $...$ o \\(...\\)); en su lugar usa caracteres Unicode legibles (por ejemplo x², √2, ≠, α) o MathML cuando corresponda.`;
-
-  try {
-    const response = await ai.models.generateContent({
-        model,
-        contents: contents,
-        config: {
-          systemInstruction: fullInstruction,
-        }
+  const lastMessage = history[history.length - 1];
+  const lastMessageParts = [{ text: lastMessage.text }];
+  if (image) {
+    lastMessageParts.unshift({
+      inlineData: {
+        mimeType: image.mimeType,
+        data: image.data
+      }
     });
-    return { text: response.text };
+  }
+  const contents = [...formattedHistory, { role: "user", parts: lastMessageParts }];
+  try {
+    const ai = getAi();
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        systemInstruction
+      }
+    });
+    return { text: result.text };
   } catch (error) {
-    console.error("Gemini API Error in askTutor:", error);
-    throw new functions.https.HttpsError("internal", "Failed to get response from AI tutor.");
+    console.error("Error llamando a la API de Gemini:", error);
+    throw new functions.https.HttpsError("internal", "Error al comunicarse con el modelo de IA.");
   }
 });
-
-/**
- * Quiz Generation: Securely generates a quiz for a given topic.
- */
-exports.generateQuiz = functions.https.onCall(async (data, context) => {
-    checkAuth(context);
-    const { topic } = data;
-    if (!topic) {
-        throw new functions.https.HttpsError("invalid-argument", "The function requires a 'topic' string.");
-    }
-    const prompt = `Generate a 3-question multiple-choice quiz about "${topic}". For each question, provide 4 options, indicate the correct answer index (0-3), and a brief explanation for the correct answer.`;
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        questions: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    text: { type: Type.STRING },
-                                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                    correctAnswerIndex: { type: Type.INTEGER },
-                                    explanation: { type: Type.STRING },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        });
-        
-        return JSON.parse(response.text);
-    } catch (error) {
-        console.error("Gemini API Error in generateQuiz:", error);
-        throw new functions.https.HttpsError("internal", "Failed to generate quiz.");
-    }
+const callSimpleAI = functions.region("europe-west1").https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "El usuario debe estar autenticado.");
+  }
+  const prompt = data.prompt;
+  if (!prompt || typeof prompt !== "string") {
+    throw new functions.https.HttpsError("invalid-argument", "Se requiere un prompt de texto.");
+  }
+  try {
+    const ai = getAi();
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction
+      }
+    });
+    return { text: result.text };
+  } catch (error) {
+    console.error("Error llamando a la API de Gemini:", error);
+    throw new functions.https.HttpsError("internal", "Error al procesar la solicitud con IA.");
+  }
 });
-
-/**
- * YouTube Search: Securely finds relevant YouTube videos.
- */
-exports.searchYouTubeVideos = functions.https.onCall(async (data, context) => {
-    checkAuth(context);
-    const { query } = data;
-    if (!query) {
-        throw new functions.https.HttpsError("invalid-argument", "The function requires a 'query' string.");
-    }
-    const prompt = `Find 5 relevant educational YouTube videos in Spanish for the topic: "${query}". For each video, provide a concise, descriptive title and its YouTube video ID.`;
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        videos: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    youtubeId: { type: Type.STRING },
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        });
-        return JSON.parse(response.text);
-    } catch (error) {
-        console.error("Gemini API Error in searchYouTubeVideos:", error);
-        throw new functions.https.HttpsError("internal", "Failed to search YouTube videos.");
-    }
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  adminSetUserClaims,
+  callSimpleAI,
+  callTutorAI,
+  syncUserRole
 });
-
-/**
- * Summary Generation with Caching: Gets a saved summary or generates a new one.
- */
-exports.getOrGenerateSummary = functions.https.onCall(async (data, context) => {
-    checkAuth(context);
-    const { videoId, topic } = data;
-    if (!videoId || !topic) {
-        throw new functions.https.HttpsError("invalid-argument", "Missing videoId or topic.");
-    }
-
-    const videoRef = db.collection('videos').doc(videoId);
-
-    try {
-        const doc = await videoRef.get();
-        if (doc.exists && doc.data().summary) {
-            return { summary: doc.data().summary };
-        }
-
-        // Summary doesn't exist, generate it
-        const prompt = `Summarize the key concepts of the following topic for a high school student: "${topic}". The summary should be concise and easy to understand.`;
-        const response = await ai.models.generateContent({ model, contents: prompt });
-        const newSummary = response.text;
-
-        // Save the new summary to Firestore
-        await videoRef.set({ summary: newSummary }, { merge: true });
-        
-        return { summary: newSummary };
-
-    } catch (error) {
-        console.error("Error in getOrGenerateSummary:", error);
-        throw new functions.https.HttpsError("internal", "Could not get or generate summary.");
-    }
-});
-
-/**
- * Simple AI Call: General-purpose text generation.
- */
-exports.callSimpleAI = functions.https.onCall(async (data, context) => {
-    checkAuth(context);
-    const { prompt } = data;
-    if (!prompt) {
-        throw new functions.https.HttpsError("invalid-argument", "The function requires a 'prompt' string.");
-    }
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                systemInstruction: "You are a helpful educational assistant. Explain concepts clearly and concisely in Spanish.",
-            }
-        });
-        return { text: response.text };
-    } catch (error) {
-        console.error("Gemini API Error in callSimpleAI:", error);
-        throw new functions.https.HttpsError("internal", "Failed to get response from Gemini.");
-    }
-});
-

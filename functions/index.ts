@@ -109,7 +109,7 @@ export const adminSetUserClaims = functions.region("europe-west1").https.onCall(
     throw new functions.https.HttpsError("unauthenticated", "Se requiere autenticación.");
   }
 
-  const callerClaims = context.auth.token || {};
+  const callerClaims = (context.auth.token || {}) as any;
   const isCallerAdmin = callerClaims.role === 'admin';
 
   if (!isCallerAdmin) {

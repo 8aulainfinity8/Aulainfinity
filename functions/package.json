@@ -2,6 +2,8 @@
   "name": "functions",
   "description": "Cloud Functions for Firebase",
   "scripts": {
+    "build": "esbuild index.ts --outfile=index.js --platform=node --target=node18 --format=cjs --packages=external",
+    "predeploy": "npm run build",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
