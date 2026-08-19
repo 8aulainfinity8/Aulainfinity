@@ -16,7 +16,7 @@ import { VoiceGroupCall } from '../VoiceGroupCall';
 import { Whiteboard } from '../Whiteboard';
 import { ClassReplayModal } from '../ClassReplayModal';
 import { ManageStudentsModal } from './ManageStudentsModal';
-import { db } from '../../services/firebase';
+import { db, auth } from '../../services/firebase';
 import { doc, onSnapshot, collection, updateDoc, setDoc, getDocs, writeBatch, deleteDoc } from 'firebase/firestore';
 import { eventEmitter } from '../../services/eventService';
 
@@ -342,27 +342,56 @@ export const AdminChatPage: React.FC = () => {
     // --- NEW ADMIN MODERATION & LIVE TRACKING STATES ---
     const [activeBoards, setActiveBoards] = useState<{ id: string; active: boolean; updatedBy?: string; updatedAt?: string }[]>([]);
 
-    // Real-time listener for active whiteboard sessions
+    // Real-time listener for active whiteboard sessions (Admin only with verified Custom Claim)
     useEffect(() => {
-        if (!user || user.role !== 'admin') return;
-        const q = collection(db, 'whiteboards');
-        const unsub = onSnapshot(q, (snapshot) => {
-            const list: any[] = [];
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                if (data.active === true) {
-                    list.push({
-                        id: docSnap.id,
-                        ...data
+        let isMounted = true;
+        let unsubscribe: (() => void) | null = null;
+
+        const setupListener = async () => {
+            if (!user || user.role !== 'admin') return;
+
+            const currentUser = auth.currentUser;
+            if (!currentUser || !currentUser.emailVerified) return;
+
+            try {
+                const tokenResult = await currentUser.getIdTokenResult();
+                if (!isMounted) return;
+
+                if (tokenResult.claims.role === 'admin') {
+                    const q = collection(db, 'whiteboards');
+                    unsubscribe = onSnapshot(q, (snapshot) => {
+                        if (!isMounted) return;
+                        const list: any[] = [];
+                        snapshot.forEach((docSnap) => {
+                            const data = docSnap.data();
+                            if (data.active === true) {
+                                list.push({
+                                    id: docSnap.id,
+                                    ...data
+                                });
+                            }
+                        });
+                        setActiveBoards(list);
+                    }, (err) => {
+                        if (err?.code !== 'permission-denied') {
+                            console.error("Error fetching whiteboards snapshot:", err);
+                        }
                     });
                 }
-            });
-            setActiveBoards(list);
-        }, (err) => {
-            console.error("Error fetching whiteboards snapshot:", err);
-        });
-        return () => unsub();
-    }, []);
+            } catch (err) {
+                console.warn("Failed to verify admin claim for whiteboards:", err);
+            }
+        };
+
+        setupListener();
+
+        return () => {
+            isMounted = false;
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [user]);
 
     // Resolve user names
     const { data: allUsers } = useQuery({

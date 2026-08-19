@@ -63,6 +63,11 @@ describe('Pruebas de Reglas de Seguridad de Firestore (Fase 2.1B)', () => {
         expect(dmsBlock).toContain('allow read, write: if isVerifiedUser()');
         expect(dmsBlock).toContain('isIdParticipant(msgId) || isParticipant(resource.data) || isApprovedTeacher()');
     });
+
+    it('Define la regla de firestore_user_seen_states/{userId} con aislamiento de propietario e isVerifiedUser', () => {
+        expect(rulesContent).toContain('match /firestore_user_seen_states/{userId}');
+        expect(rulesContent).toContain('allow read, write: if isVerifiedUser() && (isOwner(userId) || isAdmin())');
+    });
 });
 
 describe('Pruebas de Reglas de Seguridad de Cloud Storage (Fase 2.1B)', () => {

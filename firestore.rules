@@ -464,6 +464,51 @@ match /firestore_course_messages/{msgId} {
       allow read, write: if isAdmin();
     }
 
+    match /firestore_user_seen_states/{userId} {
+      allow read, write: if isVerifiedUser() && (isOwner(userId) || isAdmin());
+    }
+
+    // 8. Auxiliary & Operational Collections (Class Recordings, Whiteboard Assets, Notifications Queue)
+    match /classRecordings/{recordingId} {
+      allow read: if isVerifiedUser();
+      allow write: if isVerifiedUser() && (isApprovedTeacher() || isAdmin());
+    }
+
+    match /whiteboardStrokes/{boardId} {
+      allow read, write: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        isIdParticipant(boardId) ||
+        isParticipant(resource.data) ||
+        isEnrolledInCourse(boardId) ||
+        isTeacherOfCourse(boardId)
+      );
+    }
+
+    match /whiteboardDocs/{boardId} {
+      allow read, write: if isVerifiedUser() && (
+        isAdmin() ||
+        isApprovedTeacher() ||
+        isIdParticipant(boardId) ||
+        isParticipant(resource.data) ||
+        isEnrolledInCourse(boardId) ||
+        isTeacherOfCourse(boardId)
+      );
+    }
+
+    match /whatsapp_queue/{msgId} {
+      allow read, write: if isVerifiedUser();
+    }
+
+    match /whatsapp_logs/{logId} {
+      allow read, write: if isVerifiedUser();
+    }
+
+    match /tests/{testId} {
+      allow read: if isVerifiedUser();
+      allow write: if isApprovedTeacher() || isAdmin();
+    }
+
     // Default deny fallback
     match /{document=**} {
       allow read, write: if isAdmin();

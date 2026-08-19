@@ -1180,15 +1180,19 @@ export const initFirestoreSync = () => {
         }
 
         // 20. User Seen States sync
-        if (currentUserObj?.role === 'admin') {
-            const userSeenStatesRef = doc(db, 'firestore_user_seen_states', 'main');
+        if (currentAuth?.uid && currentAuth.emailVerified) {
+            const userSeenStatesRef = doc(db, 'firestore_user_seen_states', currentAuth.uid);
             onSnapshot(userSeenStatesRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                Object.assign(dbMock.userSeenStates, data);
-                eventEmitter.emit('user-seen-states-updated', dbMock.userSeenStates);
-            }
-        }, (err: any) => handleSyncError('Firestore user seen states sync:', err));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    Object.assign(dbMock.userSeenStates, data);
+                    eventEmitter.emit('user-seen-states-updated', dbMock.userSeenStates);
+                }
+            }, (err: any) => {
+                if (err?.code !== 'permission-denied') {
+                    handleSyncError('Firestore user seen states sync:', err);
+                }
+            });
         }
 
     } catch (error) {
@@ -2178,11 +2182,16 @@ export const syncAIQueryLogToFirestore = async (log: any) => {
 
 export const syncUserSeenStatesToFirestore = async (stateData: any) => {
     try {
-        await safeSetDoc(doc(db, 'firestore_user_seen_states', 'main'), {
+        const currentUser = auth.currentUser;
+        if (!currentUser || !currentUser.uid || !currentUser.emailVerified) return;
+        await safeSetDoc(doc(db, 'firestore_user_seen_states', currentUser.uid), {
             ...stateData,
             updatedAt: serverTimestamp()
         }, { merge: true });
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.code === 'permission-denied') {
+            return;
+        }
         console.warn('Failed to save user seen states to Firestore:', e);
     }
 };

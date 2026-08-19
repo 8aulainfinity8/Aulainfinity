@@ -9,6 +9,7 @@ import { StudentUser, TeacherUser, TopicRequest, TutoringRequest, Conversation, 
 import { eventEmitter } from '../services/eventService';
 import { NotificationContext } from './NotificationContext';
 import { AppConfigContext } from './AppConfigContext';
+import { auth } from '../services/firebase';
 
 import { isTeacherMatchForSubject, isTutoringRequestForTeacher } from '../utils/tutoringHelpers';
 
@@ -583,26 +584,32 @@ export const AdminNotificationProvider: React.FC<{ children: ReactNode }> = ({ c
       paymentIds = studentPayments.map(p => p.id);
       localStorage.setItem('admin_known_payment_ids', JSON.stringify(paymentIds));
     }
-    api.syncUserSeenStates({ knownSubscriberIds: subscriberIds, knownPaymentIds: paymentIds });
-  }, [users, studentPayments]);
+    if (user && auth.currentUser?.emailVerified) {
+      api.syncUserSeenStates({ knownSubscriberIds: subscriberIds, knownPaymentIds: paymentIds });
+    }
+  }, [users, studentPayments, user]);
 
   const acknowledgeNewStudents = useCallback(() => {
     setNewStudentsCount(0);
     if (users) {
       const currentIds = users.map(u => u.id);
       localStorage.setItem(SEEN_STUDENTS_KEY, JSON.stringify(currentIds));
-      api.syncUserSeenStates({ seenStudentUserIds: currentIds });
+      if (user && auth.currentUser?.emailVerified) {
+        api.syncUserSeenStates({ seenStudentUserIds: currentIds });
+      }
     }
-  }, [users]);
+  }, [users, user]);
 
   const acknowledgeNewTeachers = useCallback(() => {
     setNewTeachersCount(0);
     if (teachers) {
       const currentIds = teachers.map(t => t.id);
       localStorage.setItem(SEEN_TEACHERS_KEY, JSON.stringify(currentIds));
-      api.syncUserSeenStates({ seenTeacherUserIds: currentIds });
+      if (user && auth.currentUser?.emailVerified) {
+        api.syncUserSeenStates({ seenTeacherUserIds: currentIds });
+      }
     }
-  }, [teachers]);
+  }, [teachers, user]);
 
   const value = { 
       newUsersCount, 
