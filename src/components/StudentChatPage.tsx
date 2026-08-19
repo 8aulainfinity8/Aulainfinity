@@ -471,6 +471,7 @@ export const StudentChatPage: React.FC = () => {
 
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [isSending, setIsSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleCapturePhoto = (base64Image: string, fileName: string) => {
@@ -507,18 +508,12 @@ export const StudentChatPage: React.FC = () => {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSending) return;
         if ((!inputMessage.trim() && attachments.length === 0) || !activeConvoId) return;
 
+        setIsSending(true);
         try {
             await sendMessage(inputMessage.trim(), 'text', undefined, attachments, 'student');
-            if (activeChatType === 'private') {
-                api.sendPeerMessage({
-                    conversationId: activeConvoId,
-                    senderId: studentId,
-                    text: inputMessage.trim(),
-                    attachments
-                }).catch(() => {});
-            }
             setInputMessage('');
             setAttachments([]);
             if (textareaRef.current) {
@@ -531,6 +526,8 @@ export const StudentChatPage: React.FC = () => {
             }
         } catch (error) {
             addToast('Error al enviar el mensaje. Inténtalo más tarde.', 'error');
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -1502,10 +1499,11 @@ export const StudentChatPage: React.FC = () => {
                                         }}
                                         placeholder="Escribe un mensaje..."
                                         className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-base sm:text-sm p-1 text-slate-900 dark:text-slate-100 placeholder-slate-400 max-h-32 resize-none h-8 font-sans outline-none min-w-0"
+                                        disabled={isSending}
                                     />
                                     <button
                                         type="submit"
-                                        disabled={(!inputMessage.trim() && attachments.length === 0)}
+                                        disabled={(!inputMessage.trim() && attachments.length === 0) || isSending}
                                         className="p-2 sm:p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer flex-shrink-0"
                                         aria-label="Enviar mensaje"
                                     >

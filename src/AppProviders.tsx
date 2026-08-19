@@ -89,14 +89,6 @@ export const AppProviders: React.FC<{ children: ReactNode }> = ({ children }) =>
         initAppConfigSync();
         initFirestoreSync();
 
-        // Escuchar el cambio de autenticación para asegurar la resincronización correcta
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) {
-                console.log('[AppProviders] Authenticated user detected.');
-                initFirestoreSync();
-            }
-        });
-
         // Limpiar la caché de React Query al cerrar sesión para evitar fuga de datos
         const handleLogout = () => {
             console.log('[AppProviders] Clearing React Query cache on user logout.');
@@ -105,7 +97,6 @@ export const AppProviders: React.FC<{ children: ReactNode }> = ({ children }) =>
         eventEmitter.on('user-logout', handleLogout);
 
         return () => {
-            unsubscribe();
             eventEmitter.off('user-logout', handleLogout);
         };
     }, []);

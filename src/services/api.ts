@@ -1630,13 +1630,15 @@ export const sendMessage = async (messageData: Omit<DirectMessage, 'id' | 'times
 
 export const editMessage = async (messageId: string, text: string): Promise<DirectMessage> => {
     const msg = dbMock.dbEditMessage(messageId, text);
-    syncUpdateDirectMessageInFirestore(messageId, text).catch(console.error);
+    await syncUpdateDirectMessageInFirestore(messageId, text);
     return msg;
 };
 
 export const deleteMessage = async (messageId: string): Promise<{ success: boolean; conversationId: string }> => {
     const res = dbMock.dbDeleteMessage(messageId);
-    syncDeleteDirectMessageFromFirestore(messageId).catch(console.error);
+    if (res.success) {
+        await syncDeleteDirectMessageFromFirestore(messageId);
+    }
     return res;
 };
 
@@ -1714,13 +1716,15 @@ export const sendPeerMessage = async (messageData: { conversationId: string; sen
 
 export const editPeerMessage = async (messageId: string, text: string): Promise<StudentPeerMessage> => {
     const msg = dbMock.dbEditPeerMessage(messageId, text);
-    syncUpdatePeerMessageInFirestore(messageId, text).catch(console.error);
+    await syncUpdatePeerMessageInFirestore(messageId, text);
     return msg;
 };
 
 export const deletePeerMessage = async (messageId: string): Promise<{ success: boolean; conversationId: string }> => {
     const res = dbMock.dbDeletePeerMessage(messageId);
-    syncDeletePeerMessageFromFirestore(messageId).catch(console.error);
+    if (res.success) {
+        await syncDeletePeerMessageFromFirestore(messageId);
+    }
     return res;
 };
 
@@ -1757,13 +1761,15 @@ export const sendTeacherMessage = async (messageData: { conversationId?: string;
 
 export const editTeacherMessage = async (messageId: string, text: string): Promise<TeacherMessage> => {
     const msg = dbMock.dbEditTeacherMessage(messageId, text);
-    syncUpdateTeacherMessageInFirestore(messageId, text).catch(console.error);
+    await syncUpdateTeacherMessageInFirestore(messageId, text);
     return msg;
 };
 
 export const deleteTeacherMessage = async (messageId: string): Promise<{ success: boolean }> => {
     const res = dbMock.dbDeleteTeacherMessage(messageId);
-    syncDeleteTeacherMessageFromFirestore(messageId).catch(console.error);
+    if (res.success) {
+        await syncDeleteTeacherMessageFromFirestore(messageId);
+    }
     return res;
 };
 

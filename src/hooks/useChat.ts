@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   doc, 
   collection, 
-  addDoc, 
-  updateDoc, 
+  updateDoc,
+  deleteDoc, 
   onSnapshot, 
   query, 
   orderBy, 
@@ -13,7 +13,8 @@ import {
   setDoc, 
   getDoc 
 } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { db, auth } from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
 import * as api from '../services/api';
 
 export interface ChatMessage {
@@ -65,14 +66,34 @@ export function inferParticipantsFromChatId(chatId: string, currentUserId: strin
 }
 
 export function useChat(chatId: string | null, currentUserId: string | null) {
+  const { isFirebaseAuthReady, firebaseUser, firebaseEmailVerified, firebaseRole } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatMeta, setChatMeta] = useState<ChatMetadata | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Escuchar metadatos del chat y mensajes en tiempo real
+  // Escuchar metadatos del chat y mensajes en tiempo real sincronizado con Firebase Auth
   useEffect(() => {
     if (!chatId) {
+      setMessages([]);
+      setChatMeta(null);
+      setLoading(false);
+      return;
+    }
+
+    // 1. Esperar a que Firebase Auth esté listo
+    if (!isFirebaseAuthReady) {
+      console.log('[Firestore] Chat listeners waiting for Firebase Auth READY');
+      setLoading(true);
+      return;
+    }
+
+    // 2. Comprobar sesión real de Firebase Auth y verificación de email
+    const currentUser = auth?.currentUser || firebaseUser;
+    const isVerified = Boolean(currentUser && (currentUser.emailVerified || firebaseEmailVerified));
+
+    if (!currentUser || !isVerified) {
+      console.log('[Firestore] Chat listeners waiting for Firebase Auth or unauthenticated/unverified session');
       setMessages([]);
       setChatMeta(null);
       setLoading(false);
@@ -82,56 +103,67 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
     setLoading(true);
     setError(null);
 
-    // Documento de metadatos del chat
-    const chatRef = doc(db, 'chats', chatId);
-    const unsubChat = onSnapshot(
-      chatRef, 
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setChatMeta({ chatId: snapshot.id, ...snapshot.data() } as ChatMetadata);
-        } else {
-          setChatMeta(null);
+    let unsubChat: (() => void) | null = null;
+    let unsubMessages: (() => void) | null = null;
+
+    console.log(`[Firestore] Chat listeners initialized for chat: ${chatId} | user: ${currentUser.uid} | role: ${firebaseRole || 'none'}`);
+
+    try {
+      // Documento de metadatos del chat
+      const chatRef = doc(db, 'chats', chatId);
+      unsubChat = onSnapshot(
+        chatRef, 
+        (snapshot) => {
+          if (snapshot.exists()) {
+            setChatMeta({ chatId: snapshot.id, ...snapshot.data() } as ChatMetadata);
+          } else {
+            setChatMeta(null);
+          }
+        }, 
+        (err) => {
+          console.warn('[Firestore] Error al obtener metadatos del chat:', err.message);
+          setError('No se pudieron cargar los metadatos de la conversación.');
         }
-      }, 
-      (err) => {
-        console.error('Error al obtener metadatos del chat:', err);
-        setError('No se pudieron cargar los metadatos de la conversación.');
-      }
-    );
+      );
 
-    // Subcolección de mensajes ordenada cronológicamente (limitada a los últimos 100 para escalabilidad y ahorro de lecturas)
-    const messagesQuery = query(
-      collection(db, 'chats', chatId, 'messages'),
-      orderBy('timestamp', 'asc'),
-      limitToLast(100)
-    );
+      // Subcolección de mensajes ordenada cronológicamente (limitada a los últimos 100)
+      const messagesQuery = query(
+        collection(db, 'chats', chatId, 'messages'),
+        orderBy('timestamp', 'asc'),
+        limitToLast(100)
+      );
 
-    const unsubMessages = onSnapshot(
-      messagesQuery, 
-      (snapshot) => {
-        const msgs: ChatMessage[] = snapshot.docs.map(docSnap => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        } as ChatMessage));
-        setMessages(msgs);
-        setLoading(false);
-      }, 
-      (err) => {
-        console.error('Error al escuchar mensajes:', err);
-        setError('Error en la conexión en tiempo real con los mensajes.');
-        setLoading(false);
-      }
-    );
+      unsubMessages = onSnapshot(
+        messagesQuery, 
+        (snapshot) => {
+          const msgs: ChatMessage[] = snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            ...docSnap.data()
+          } as ChatMessage));
+          setMessages(msgs);
+          setLoading(false);
+        }, 
+        (err) => {
+          console.warn('[Firestore] Error al escuchar mensajes:', err.message);
+          setError('Error en la conexión en tiempo real con los mensajes.');
+          setLoading(false);
+        }
+      );
+    } catch (e) {
+      console.warn('[Firestore] Excepción al configurar listeners:', e);
+      setLoading(false);
+    }
 
     return () => {
-      unsubChat();
-      unsubMessages();
+      if (unsubChat) unsubChat();
+      if (unsubMessages) unsubMessages();
     };
-  }, [chatId]);
+  }, [chatId, isFirebaseAuthReady, firebaseUser, firebaseEmailVerified, firebaseRole]);
 
   // Marcar como leído los mensajes de la conversación actual
   const markAsRead = useCallback(async () => {
     if (!chatId || !currentUserId) return;
+    if (!auth?.currentUser || !auth.currentUser.emailVerified) return;
 
     try {
       const chatRef = doc(db, 'chats', chatId);
@@ -139,9 +171,11 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
         [`unreadCount.${currentUserId}`]: 0
       }).catch(() => {});
     } catch (err) {
-      console.error('Error al marcar mensajes como leídos:', err);
+      console.warn('[useChat] Error al marcar mensajes como leídos:', err);
     }
   }, [chatId, currentUserId]);
+
+  const isSendingRef = useRef(false);
 
   // Enviar mensaje e inicializar correctamente metadatos e unreadCount
   const sendMessage = async (
@@ -152,8 +186,34 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
     senderRole?: string
   ) => {
     if (!chatId || !currentUserId || (!text.trim() && (!attachments || attachments.length === 0))) return;
+    if (isSendingRef.current) {
+      console.warn('[useChat] Message send already in flight, ignoring duplicate call');
+      return;
+    }
 
+    isSendingRef.current = true;
     try {
+      // Verificar que existe sesión real de Firebase Auth antes de escribir en Firestore
+      const currentUser = auth?.currentUser;
+      const isFirebaseAuthed = Boolean(currentUser && currentUser.emailVerified);
+
+      if (!isFirebaseAuthed) {
+        console.warn('[useChat] Skipped Firestore write: Firebase Auth session not present or not verified.');
+        // Sincronizar únicamente con el API local si es sesión mock/local sin disparar error a Firestore
+        try {
+          await api.sendMessage({
+            conversationId: chatId,
+            senderId: currentUserId,
+            senderRole: (senderRole || 'student') as any,
+            text,
+            attachments
+          });
+        } catch (apiErr) {
+          console.warn('Could not sync message to mock API backend:', apiErr);
+        }
+        return;
+      }
+
       const chatRef = doc(db, 'chats', chatId);
       const messagesRef = collection(db, 'chats', chatId, 'messages');
 
@@ -207,8 +267,10 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
         });
       }
 
-      // Insertar el nuevo mensaje
+      // Insertar el nuevo mensaje de forma idempotente con setDoc y merge
+      const messageDocRef = doc(messagesRef);
       const messagePayload: any = {
+        id: messageDocRef.id,
         senderId: currentUserId,
         text,
         type,
@@ -221,7 +283,7 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
       if (attachments && attachments.length > 0) {
         messagePayload.attachments = attachments;
       }
-      await addDoc(messagesRef, messagePayload);
+      await setDoc(messageDocRef, messagePayload, { merge: true });
 
       // Incrementar contador de no leídos para los otros participantes
       const updateData: Record<string, any> = {
@@ -235,39 +297,69 @@ export function useChat(chatId: string | null, currentUserId: string | null) {
         }
       });
 
-      if (chatExists) {
-        await updateDoc(chatRef, updateData).catch(async (err) => {
-          console.warn('[useChat] updateDoc failed, retrying with setDoc merge:', err);
-          await setDoc(chatRef, {
-            lastMessage: text,
-            lastMessageTimestamp: serverTimestamp(),
-            unreadCount: initialUnread
-          }, { merge: true }).catch((setErr) => {
-            console.warn('[useChat] Fallback setDoc also failed/queued:', setErr);
-          });
-        });
-      }
-
-      try {
-        await api.sendMessage({
-          conversationId: chatId,
-          senderId: currentUserId,
-          senderRole: (senderRole || 'student') as any,
-          text,
-          attachments
-        });
-      } catch (apiErr) {
-        console.warn('Could not sync message to mock API backend:', apiErr);
-      }
+      await setDoc(chatRef, updateData, { merge: true }).catch((err) => {
+        console.warn('[useChat] Chat update error (possibly offline/queued):', err);
+      });
 
     } catch (err) {
       console.error('Error al enviar mensaje:', err);
       setError('No se pudo enviar el mensaje. Verifica tu conexión.');
       throw err;
+    } finally {
+      isSendingRef.current = false;
+    }
+  };
+
+  
+  const editMessage = async (messageId: string, newText: string) => {
+    if (!chatId || !currentUserId || !messageId) return;
+    try {
+      const currentUser = auth?.currentUser;
+      const isFirebaseAuthed = Boolean(currentUser && currentUser.emailVerified);
+      if (!isFirebaseAuthed) {
+        if (chatId.startsWith('peer_')) {
+            await api.editPeerMessage(messageId, newText);
+        } else if (chatId.startsWith('teacher_')) {
+            await api.editTeacherMessage(messageId, newText);
+        } else {
+            await api.editMessage(messageId, newText);
+        }
+        return;
+      }
+      const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+      await updateDoc(messageRef, { text: newText });
+    } catch (err) {
+      console.error('Error al editar mensaje:', err);
+      throw err;
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!chatId || !currentUserId || !messageId) return;
+    try {
+      const currentUser = auth?.currentUser;
+      const isFirebaseAuthed = Boolean(currentUser && currentUser.emailVerified);
+      if (!isFirebaseAuthed) {
+        if (chatId.startsWith('peer_')) {
+            await api.deletePeerMessage(messageId);
+        } else if (chatId.startsWith('teacher_')) {
+            await api.deleteTeacherMessage(messageId);
+        } else {
+            await api.deleteMessage(messageId);
+        }
+        return;
+      }
+      const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+      await deleteDoc(messageRef);
+    } catch (err) {
+      console.error('Error al borrar mensaje:', err);
+      throw err;
     }
   };
 
   return {
+    editMessage,
+    deleteMessage,
     messages,
     chatMeta,
     loading,

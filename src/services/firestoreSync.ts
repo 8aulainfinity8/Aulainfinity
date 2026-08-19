@@ -1834,8 +1834,19 @@ async function deleteFromCollectionRobust(colName: string, idVal: string, extraE
         const allIds = Array.from(new Set([idVal, ...extraEmailsOrIds].filter(Boolean)));
         if (allIds.length === 0) return;
 
-        // Direct doc deletes in parallel
-        const directDeletePromises = allIds.map(val => deleteDoc(doc(db, colName, val)).catch(() => {}));
+        console.log(`[ChatDelete] collection: ${colName}, ids:`, allIds);
+
+        // Direct doc deletes in parallel with diagnostics
+        const directDeletePromises = allIds.map(async (val) => {
+            try {
+                console.log(`[ChatDelete] documentPath: ${colName}/${val}`);
+                await deleteDoc(doc(db, colName, val));
+                console.log(`[ChatDelete] SUCCESS`);
+            } catch (err: any) {
+                console.error(`[ChatDelete] ERROR\ncode: ${err?.code}\nmessage: ${err?.message}\ndocumentPath: ${colName}/${val}`);
+                throw err;
+            }
+        });
 
         const isUserOrMessageCollection = [
             'users', 'students', 'teachers', 'admins', 'firestore_users',
@@ -1846,7 +1857,7 @@ async function deleteFromCollectionRobust(colName: string, idVal: string, extraE
         ].includes(colName);
 
         if (!isUserOrMessageCollection) {
-            await Promise.allSettled(directDeletePromises);
+            await Promise.all(directDeletePromises);
             return;
         }
 
@@ -1856,7 +1867,10 @@ async function deleteFromCollectionRobust(colName: string, idVal: string, extraE
 
         for (const val of allIds) {
             for (const field of fields) {
-                queryPromises.push(getDocs(query(colRef, where(field, '==', val))).catch(() => null));
+                queryPromises.push(getDocs(query(colRef, where(field, '==', val))).catch((e) => {
+                    console.warn(`[ChatDelete] Query warning on ${colName} field ${field}:`, e?.message);
+                    return null;
+                }));
             }
             if (val.includes('@')) {
                 queryPromises.push(getDocs(query(colRef, where('email', '==', val.toLowerCase()))).catch(() => null));
@@ -1864,7 +1878,7 @@ async function deleteFromCollectionRobust(colName: string, idVal: string, extraE
         }
 
         const [_, queryResults] = await Promise.all([
-            Promise.allSettled(directDeletePromises),
+            Promise.all(directDeletePromises),
             Promise.allSettled(queryPromises)
         ]);
 
@@ -1876,15 +1890,26 @@ async function deleteFromCollectionRobust(colName: string, idVal: string, extraE
         });
 
         if (matchingDocIds.size > 0) {
-            const queryDeletePromises = Array.from(matchingDocIds).map(docId =>
-                deleteDoc(doc(db, colName, docId)).catch(() => {})
-            );
+            const queryDeletePromises = Array.from(matchingDocIds).map(async (docId) => {
+                try {
+                    console.log(`[ChatDelete] queryDocPath: ${colName}/${docId}`);
+                    await deleteDoc(doc(db, colName, docId));
+                    console.log(`[ChatDelete] Query delete success: ${colName}/${docId}`);
+                } catch (err: any) {
+                    console.error(`[ChatDelete] ERROR:`, err);
+                    console.error(`code:`, err?.code);
+                    console.error(`message:`, err?.message);
+                }
+            });
             await Promise.allSettled(queryDeletePromises);
         }
 
         console.log(`[FirestoreSync] Deleted robustly from ${colName}: ${allIds.join(', ')}`);
-    } catch (e) {
-        console.warn(`[FirestoreSync] Error robust delete from ${colName}:`, e);
+    } catch (e: any) {
+        console.error(`[ChatDelete] ERROR in deleteFromCollectionRobust for ${colName}:`, e);
+        console.error(`code:`, e?.code);
+        console.error(`message:`, e?.message);
+        throw e;
     }
 }
 
@@ -2103,48 +2128,72 @@ export const syncDeleteDirectMessageFromFirestore = async (messageId: string) =>
     await deleteFromCollectionRobust('firestore_direct_messages', messageId);
 };
 export const syncUpdateDirectMessageInFirestore = async (messageId: string, text: string) => {
+    console.log(`[ChatEdit] START chatId: unknown, messageId: ${messageId}`);
     try {
         const colRef = collection(db, 'firestore_direct_messages');
         const q = query(colRef, where('id', '==', messageId));
         const snap = await getDocs(q);
+        
+        let targetDocId = messageId;
         if (!snap.empty) {
-            await safeSetDoc(doc(db, 'firestore_direct_messages', snap.docs[0].id), { text, updatedAt: serverTimestamp() }, { merge: true });
-        } else {
-            await safeSetDoc(doc(db, 'firestore_direct_messages', messageId), { text, updatedAt: serverTimestamp() }, { merge: true });
+            targetDocId = snap.docs[0].id;
         }
-    } catch (e) {}
+        
+        console.log(`[ChatEdit] documentPath: firestore_direct_messages/${targetDocId}`);
+        await safeSetDoc(doc(db, 'firestore_direct_messages', targetDocId), { text, updatedAt: serverTimestamp() }, { merge: true });
+        console.log(`[ChatEdit] SUCCESS`);
+    } catch (e: any) {
+        console.error(`[ChatEdit] ERROR code: ${e?.code} message: ${e?.message}`);
+        throw e;
+    }
 };
 
 export const syncDeletePeerMessageFromFirestore = async (messageId: string) => {
     await deleteFromCollectionRobust('firestore_peer_messages', messageId);
 };
 export const syncUpdatePeerMessageInFirestore = async (messageId: string, text: string) => {
+    console.log(`[ChatEdit] START peer messageId: ${messageId}`);
     try {
         const colRef = collection(db, 'firestore_peer_messages');
         const q = query(colRef, where('id', '==', messageId));
         const snap = await getDocs(q);
+        
+        let targetDocId = messageId;
         if (!snap.empty) {
-            await safeSetDoc(doc(db, 'firestore_peer_messages', snap.docs[0].id), { text, updatedAt: serverTimestamp() }, { merge: true });
-        } else {
-            await safeSetDoc(doc(db, 'firestore_peer_messages', messageId), { text, updatedAt: serverTimestamp() }, { merge: true });
+            targetDocId = snap.docs[0].id;
         }
-    } catch (e) {}
+        
+        console.log(`[ChatEdit] documentPath: firestore_peer_messages/${targetDocId}`);
+        await safeSetDoc(doc(db, 'firestore_peer_messages', targetDocId), { text, updatedAt: serverTimestamp() }, { merge: true });
+        console.log(`[ChatEdit] SUCCESS`);
+    } catch (e: any) {
+        console.error(`[ChatEdit] ERROR code: ${e?.code} message: ${e?.message}`);
+        throw e;
+    }
 };
 
 export const syncDeleteTeacherMessageFromFirestore = async (messageId: string) => {
     await deleteFromCollectionRobust('firestore_teacher_messages', messageId);
 };
 export const syncUpdateTeacherMessageInFirestore = async (messageId: string, text: string) => {
+    console.log(`[ChatEdit] START teacher messageId: ${messageId}`);
     try {
         const colRef = collection(db, 'firestore_teacher_messages');
         const q = query(colRef, where('id', '==', messageId));
         const snap = await getDocs(q);
+        
+        let targetDocId = messageId;
         if (!snap.empty) {
-            await safeSetDoc(doc(db, 'firestore_teacher_messages', snap.docs[0].id), { text, updatedAt: serverTimestamp() }, { merge: true });
-        } else {
-            await safeSetDoc(doc(db, 'firestore_teacher_messages', messageId), { text, updatedAt: serverTimestamp() }, { merge: true });
+            targetDocId = snap.docs[0].id;
         }
-    } catch (e) {}
+        
+        console.log(`[ChatEdit] documentPath: firestore_teacher_messages/${targetDocId}`);
+        await safeSetDoc(doc(db, 'firestore_teacher_messages', targetDocId), { text, updatedAt: serverTimestamp() }, { merge: true });
+        console.log(`[ChatEdit] SUCCESS`);
+    } catch (e: any) {
+        console.error(`[ChatEdit] ERROR code: ${e?.code} message: ${e?.message}`);
+        throw e;
+    }
 };
 
 export const syncAppConfigToFirestore = async (config: any) => {

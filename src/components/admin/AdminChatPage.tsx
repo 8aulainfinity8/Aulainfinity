@@ -180,19 +180,41 @@ const RenderAttachments: React.FC<{ attachments?: Attachment[] }> = ({ attachmen
 const MessageBubble: React.FC<{
     message: DirectMessage;
     canManage: boolean;
-    onEdit: (messageId: string, text: string) => void;
-    onDelete: (messageId: string) => void;
+    onEdit: (messageId: string, text: string) => Promise<void> | void;
+    onDelete: (messageId: string) => Promise<void> | void;
 }> = ({ message, canManage, onEdit, onDelete }) => {
     const isOutgoing = message.senderRole === 'admin' || message.senderRole === 'teacher';
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(message.text);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (editText.trim() && editText.trim() !== message.text) {
-            onEdit(message.id, editText.trim());
+            setIsProcessing(true);
+            try {
+                await onEdit(message.id, editText.trim());
+                setIsEditing(false);
+            } catch (err) {
+                console.error('Error al guardar edición:', err);
+            } finally {
+                setIsProcessing(false);
+            }
+        } else {
+            setIsEditing(false);
         }
-        setIsEditing(false);
+    };
+
+    const handleDelete = async () => {
+        setIsProcessing(true);
+        try {
+            await onDelete(message.id);
+            setShowDeleteConfirm(false);
+        } catch (err) {
+            console.error('Error al borrar mensaje:', err);
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     return (
@@ -220,18 +242,19 @@ const MessageBubble: React.FC<{
                                 onChange={(e) => setEditText(e.target.value)}
                                 className="w-full text-sm p-1.5 rounded border border-indigo-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none"
                                 rows={2}
+                                disabled={isProcessing}
                             />
                             <div className="flex justify-end gap-2 text-xs">
-                                <button onClick={() => { setIsEditing(false); setEditText(message.text); }} className={`px-2 py-1 ${isOutgoing ? 'text-indigo-100' : 'text-slate-550'}`}>Cancelar</button>
-                                <button onClick={handleSave} className="px-2 py-1 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-indigo-650 font-bold rounded shadow-sm">Guardar</button>
+                                <button disabled={isProcessing} onClick={() => { setIsEditing(false); setEditText(message.text); }} className={`px-2 py-1 ${isOutgoing ? 'text-indigo-100' : 'text-slate-550'} disabled:opacity-50`}>Cancelar</button>
+                                <button disabled={isProcessing} onClick={handleSave} className="px-2 py-1 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-400 font-bold rounded shadow-sm disabled:opacity-50">{isProcessing ? 'Guardando...' : 'Guardar'}</button>
                             </div>
                         </div>
                     ) : showDeleteConfirm ? (
                         <div className="flex flex-col gap-2 min-w-[220px] text-xs">
                             <p className={`font-bold ${isOutgoing ? 'text-white' : 'text-red-550 dark:text-red-400'}`}>¿Eliminar este mensaje permanentemente?</p>
                             <div className="flex justify-end gap-2">
-                                <button onClick={() => setShowDeleteConfirm(false)} className={`px-2 py-1 hover:underline ${isOutgoing ? 'text-indigo-100' : 'text-slate-550'}`}>No, cancelar</button>
-                                <button onClick={() => { onDelete(message.id); setShowDeleteConfirm(false); }} className="px-2.5 py-1 bg-red-600 text-white font-bold rounded shadow-sm hover:bg-red-700">Sí, eliminar</button>
+                                <button disabled={isProcessing} onClick={() => setShowDeleteConfirm(false)} className={`px-2 py-1 hover:underline ${isOutgoing ? 'text-indigo-100' : 'text-slate-550'} disabled:opacity-50`}>No, cancelar</button>
+                                <button disabled={isProcessing} onClick={handleDelete} className="px-2.5 py-1 bg-red-600 text-white font-bold rounded shadow-sm hover:bg-red-700 disabled:opacity-50">{isProcessing ? 'Borrando...' : 'Sí, eliminar'}</button>
                             </div>
                         </div>
                     ) : (
@@ -246,6 +269,7 @@ const MessageBubble: React.FC<{
                                             onClick={() => setIsEditing(true)} 
                                             className={`p-1 rounded hover:bg-black/10 transition ${isOutgoing ? 'text-blue-100' : 'text-slate-400 hover:text-indigo-600'}`} 
                                             title="Editar mensaje"
+                                            disabled={isProcessing}
                                         >
                                             <PencilIcon className="w-3.5 h-3.5" />
                                         </button>
@@ -254,6 +278,7 @@ const MessageBubble: React.FC<{
                                             onClick={() => setShowDeleteConfirm(true)} 
                                             className={`p-1 rounded hover:bg-black/10 transition ${isOutgoing ? 'text-red-200' : 'text-slate-400 hover:text-red-600'}`} 
                                             title="Eliminar mensaje"
+                                            disabled={isProcessing}
                                         >
                                             <TrashIcon className="w-3.5 h-3.5" />
                                         </button>
@@ -804,7 +829,7 @@ export const AdminChatPage: React.FC = () => {
     }, [conversations, groupConversations, peerConversations, selectedConversationId, activeTab, allUsers, teachers, sortedConversations]);
 
     const effectiveConvoId = activeConversation?.id || selectedConversationId;
-    const { messages: unifiedMessages, loading: loadingUnifiedMessages, sendMessage, markAsRead } = useChat(effectiveConvoId, user?.id || null);
+    const { messages: unifiedMessages, loading: loadingUnifiedMessages, sendMessage, markAsRead, editMessage, deleteMessage } = useChat(effectiveConvoId, user?.id || null);
 
     const activeMessages = useMemo(() => {
         if (!unifiedMessages) return [];
@@ -884,6 +909,7 @@ export const AdminChatPage: React.FC = () => {
 
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [isSending, setIsSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleCapturePhoto = (base64Image: string, fileName: string) => {
@@ -924,12 +950,14 @@ export const AdminChatPage: React.FC = () => {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSending) return;
         if ((!input.trim() && attachments.length === 0) || !selectedConversationId) return;
         if (!isApprovedTeacher) {
             alert('No tienes luz verde de administración para enviar mensajes.');
             return;
         }
 
+        setIsSending(true);
         try {
             await sendMessage(input.trim(), 'text', undefined, attachments, isTeacher ? 'teacher' : 'admin');
             setInput('');
@@ -939,6 +967,8 @@ export const AdminChatPage: React.FC = () => {
             }
         } catch (error) {
             console.error("Failed to send message", error);
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -1378,23 +1408,11 @@ export const AdminChatPage: React.FC = () => {
                                                         : (!isTeacher || msg.senderRole === 'teacher' || (isTeacher && activeConversation?.teacherId === user?.id))
                                             )
                                         }
-                                        onEdit={(messageId, text) => {
-                                            if (activeTab === 'peer') {
-                                                editPeerMessageMutation.mutate({ messageId, text });
-                                            } else if (activeTab === 'teacher') {
-                                                editTeacherMessageMutation.mutate({ messageId, text });
-                                            } else {
-                                                editMessageMutation.mutate({ messageId, text });
-                                            }
+                                        onEdit={async (messageId, text) => {
+                                            await editMessage(messageId, text);
                                         }}
-                                        onDelete={(messageId) => {
-                                            if (activeTab === 'peer') {
-                                                deletePeerMessageMutation.mutate(messageId);
-                                            } else if (activeTab === 'teacher') {
-                                                deleteTeacherMessageMutation.mutate(messageId);
-                                            } else {
-                                                deleteMessageMutation.mutate(messageId);
-                                            }
+                                        onDelete={async (messageId) => {
+                                            await deleteMessage(messageId);
                                         }}
                                     />
                                 ))
@@ -1470,15 +1488,15 @@ export const AdminChatPage: React.FC = () => {
                                     rows={1}
                                     className="flex-1 bg-transparent border-none focus:ring-0 resize-none p-1 text-slate-900 dark:text-slate-100 placeholder-gray-500 dark:placeholder-slate-400 max-h-40 outline-none text-sm disabled:cursor-not-allowed"
                                     autoFocus
-                                    disabled={!isApprovedTeacher}
+                                    disabled={!isApprovedTeacher || isSending}
                                 />
                                 <button 
                                     type="submit" 
-                                    disabled={(!input.trim() && attachments.length === 0) || false || !isApprovedTeacher}
+                                    disabled={(!input.trim() && attachments.length === 0) || isSending || !isApprovedTeacher}
                                     className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed transition-colors flex-shrink-0"
                                     aria-label="Enviar mensaje"
                                 >
-                                    {false ? <Spinner /> : <PaperAirplaneIcon className="w-5 h-5" />}
+                                    {isSending ? <Spinner /> : <PaperAirplaneIcon className="w-5 h-5" />}
                                 </button>
                              </div>
                         </form>

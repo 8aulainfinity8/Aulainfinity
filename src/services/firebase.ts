@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { 
   initializeFirestore, 
   enableNetwork, 
@@ -9,7 +9,7 @@ import {
   updateDoc, 
   deleteDoc 
 } from "firebase/firestore";
-import { getAuth, onAuthStateChanged, onIdTokenChanged } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
@@ -52,6 +52,11 @@ const firebaseConfig = {
 
 // Inicializa Firebase
 const app = initializeApp(firebaseConfig);
+const apps = getApps();
+console.log(`[AUTH DEBUG] Firebase Apps count: ${apps.length}`);
+apps.forEach((a, i) => {
+  console.log(`[AUTH DEBUG] App ${i} name: ${a.name}, projectId: ${a.options.projectId}`);
+});
 
 // Inicializa Firestore
 export const db = databaseId 
@@ -105,28 +110,6 @@ if (typeof window !== 'undefined') {
     logAdminEvent('warn', '⚠️ Red del navegador perdida (Offline)');
   });
 }
-
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    logAdminEvent('info', '🔐 Autenticación Firebase activa', {
-      uid: user.uid,
-      email: user.email,
-      emailVerified: user.emailVerified
-    });
-  } else {
-    logAdminEvent('info', '🔓 Usuario no autenticado en Firebase (Sesión cerrada o invitado)');
-  }
-}, (err) => {
-  logAdminEvent('error', '❌ Error en Auth State Change:', err);
-});
-
-onIdTokenChanged(auth, (user) => {
-  if (user) {
-    user.getIdTokenResult().catch((err) => {
-      logAdminEvent('error', '⚠️ Error al refrescar token de autenticación:', err);
-    });
-  }
-});
 
 enableNetwork(db)
   .then(() => logAdminEvent('info', '📡 Conexión a red de Firestore habilitada'))

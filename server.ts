@@ -2,7 +2,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
@@ -172,10 +172,36 @@ export async function canAccessStoragePath(
   }
 }
 
-// Initialize Firebase Admin (Only if not already initialized)
+// ============================================================================
+// Firebase Admin SDK Initialization
+// Autoritativo para el proyecto oficial: aulainfinity8-a6ac0
+// ============================================================================
+const FIREBASE_ADMIN_PROJECT_ID = 
+  process.env.FIREBASE_PROJECT_ID || 
+  process.env.VITE_FIREBASE_PROJECT_ID || 
+  'aulainfinity8-a6ac0';
+
+// Sincronizar variables de entorno para que cualquier llamada GCP apunte al proyecto correcto
+process.env.GCLOUD_PROJECT = FIREBASE_ADMIN_PROJECT_ID;
+process.env.GOOGLE_CLOUD_PROJECT = FIREBASE_ADMIN_PROJECT_ID;
+
 if (!getApps().length) {
   try {
-    initializeApp();
+    let credentialOption;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      try {
+        const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        credentialOption = cert(sa);
+      } catch (saErr) {
+        console.warn('[Firebase Admin] Error parseando FIREBASE_SERVICE_ACCOUNT_KEY:', saErr);
+      }
+    }
+
+    initializeApp({
+      projectId: FIREBASE_ADMIN_PROJECT_ID,
+      ...(credentialOption ? { credential: credentialOption } : {})
+    });
+    console.log(`[Firebase Admin] Inicializado exitosamente para el proyecto: ${FIREBASE_ADMIN_PROJECT_ID}`);
   } catch (e) {
     console.error("Firebase admin init error", e);
   }
@@ -192,7 +218,8 @@ export const authenticateUser = async (req: express.Request, res: express.Respon
   
   try {
     const decodedToken = await getAuth().verifyIdToken(token);
-    decodedToken.role = decodedToken.role || 'student';
+    const role = decodedToken.role || (decodedToken.isAdmin ? 'admin' : 'student');
+    decodedToken.role = role;
     (req as any).user = decodedToken;
     next();
   } catch (error) {
@@ -222,7 +249,7 @@ export const requireRole = (allowedRoles: string[]) => {
     
     try {
       const decodedToken = await getAuth().verifyIdToken(token);
-      const role = decodedToken.role || 'student';
+      const role = decodedToken.role || (decodedToken.isAdmin ? 'admin' : 'student');
       
       if (!allowedRoles.includes(role)) {
         return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });

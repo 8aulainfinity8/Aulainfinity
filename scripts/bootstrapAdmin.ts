@@ -5,19 +5,37 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // Load config or initialize default
+const FIREBASE_ADMIN_PROJECT_ID = 
+  process.env.FIREBASE_PROJECT_ID || 
+  process.env.VITE_FIREBASE_PROJECT_ID || 
+  'aulainfinity8-a6ac0';
+
+process.env.GCLOUD_PROJECT = FIREBASE_ADMIN_PROJECT_ID;
+process.env.GOOGLE_CLOUD_PROJECT = FIREBASE_ADMIN_PROJECT_ID;
+
 if (!getApps().length) {
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      process.env.GCLOUD_PROJECT = config.projectId;
-      process.env.GOOGLE_CLOUD_PROJECT = config.projectId;
-      initializeApp({
-        projectId: config.projectId,
-      });
-    } else {
-      initializeApp();
+    let credentialOption;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      try {
+        const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        credentialOption = cert(sa);
+      } catch (saErr) {
+        console.warn('[bootstrapAdmin] Error parseando FIREBASE_SERVICE_ACCOUNT_KEY:', saErr);
+      }
+    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+      try {
+        const sa = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'));
+        credentialOption = cert(sa);
+      } catch (saErr) {
+        console.warn('[bootstrapAdmin] Error leyendo GOOGLE_APPLICATION_CREDENTIALS:', saErr);
+      }
     }
+
+    initializeApp({
+      projectId: FIREBASE_ADMIN_PROJECT_ID,
+      ...(credentialOption ? { credential: credentialOption } : {})
+    });
   } catch (e) {
     console.error('[bootstrapAdmin] Error initializing Firebase Admin:', e);
   }
@@ -50,6 +68,7 @@ async function main() {
     console.log('Custom Claims actuales:', JSON.stringify(userRecord.customClaims || {}, null, 2));
 
     const targetClaims = {
+      ...(userRecord.customClaims || {}),
       role: 'admin',
       isAdmin: true,
       isApprovedForTutoring: true,
