@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aulainfinity-pwa-cache-v1';
+const CACHE_NAME = 'aulainfinity-pwa-cache-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -6,7 +6,6 @@ const ASSETS_TO_CACHE = [
   '/icon-192.png',
   '/icon-512.png',
   '/favicon.png',
-  '/brand/icon.png'
 ];
 
 // Installs assets and pre-caches the main app shell
@@ -42,12 +41,34 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Stale-While-Revalidate fetching intercepts with offline fallback
+// Fetch handling with Network First for brand/images and Stale-While-Revalidate for app shell
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   
   // Skip browser extensions, external SDK assets or analytics, and write APIs (POST etc)
   if (!request.url.startsWith(self.location.origin) || request.method !== 'GET') {
+    return;
+  }
+
+  // Handle image and brand assets with Network First strategy to prevent serving stale/corrupt cached files
+  if (request.url.includes('/brand/') || request.destination === 'image') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(request).then((cachedResponse) => {
+            return cachedResponse || new Response('Asset not available offline', { status: 404, statusText: 'Not Found' });
+          });
+        })
+    );
     return;
   }
 

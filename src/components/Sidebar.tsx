@@ -213,23 +213,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ sidebarState, onItemClick }) =
         <>
             {/* Increased z-index to z-[100] to overlap bottom nav, modals, and other overlays on mobile */}
             <aside className={`sidebar-container bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 border-r border-gray-200 dark:border-slate-700 shadow-lg flex flex-col fixed h-full z-[100] transition-all duration-300 ${sidebarWidth} ${transformClass} overflow-y-auto pb-28 md:pb-4`}>
-                <div className="flex items-center justify-center p-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0 overflow-hidden bg-white dark:bg-slate-800">
+                <div className="flex items-center justify-center p-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0 overflow-hidden">
                     {isSidebarOpen ? (
-                        <img 
-                            src={OFFICIAL_LOGO_PATH} 
-                            alt="AulaInfinity Logo" 
-                            className="h-10 object-contain bg-white rounded-lg p-1" 
-                            referrerPolicy="no-referrer"
-                            onError={(e) => handleImageError(e, 'full')}
-                        />
+                        <div className="bg-white rounded p-1 flex items-center justify-center inline-flex">
+                            <img 
+                                src={OFFICIAL_LOGO_PATH} 
+                                alt="AulaInfinity" 
+                                className="h-9 w-auto object-contain" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => handleImageError(e, 'full')}
+                            />
+                        </div>
                     ) : (
-                        <img 
-                            src={OFFICIAL_ICON_PATH} 
-                            alt="AulaInfinity Icon" 
-                            className="w-8 h-8 rounded-full border shadow-sm object-contain p-1 transition-colors border-indigo-150 bg-white" 
-                            referrerPolicy="no-referrer"
-                            onError={(e) => handleImageError(e, 'icon')}
-                        />
+                        <div className="bg-white rounded p-1 flex items-center justify-center inline-flex">
+                            <img 
+                                src={OFFICIAL_ICON_PATH} 
+                                alt="AulaInfinity Icon" 
+                                className="w-8 h-8 object-contain" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => handleImageError(e, 'icon')}
+                            />
+                        </div>
                     )}
                 </div>
 

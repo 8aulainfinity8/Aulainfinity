@@ -1112,6 +1112,9 @@ async function startServer() {
     }
   });
 
+  // Serve public directory static assets explicitly
+  app.use(express.static(path.join(process.cwd(), "public")));
+
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

@@ -29,6 +29,8 @@ import {
     syncSendCourseGroupMessageToFirestore,
     syncSubmitTutoringRequestToFirestore,
     syncDeleteTutoringRequestFromFirestore,
+    syncUpdateStudentNotesToFirestore,
+    syncAssignStudentTeacherInFirestore,
     syncUserToFirestore,
     syncConversationTeacherInFirestore,
     deleteUserFromFirestore,
@@ -748,8 +750,8 @@ export const fetchUsers = async (): Promise<StudentUser[]> => {
                             fetchedStudents[idx] = {
                                 ...existing,
                                 ...normalizedData,
-                                assignedTeacherId: normalizedData.assignedTeacherId || existing.assignedTeacherId || undefined,
-                                assignedTeacherName: normalizedData.assignedTeacherName || existing.assignedTeacherName || undefined,
+                                assignedTeacherId: normalizedData.assignedTeacherId !== undefined ? normalizedData.assignedTeacherId : existing.assignedTeacherId,
+                                assignedTeacherName: normalizedData.assignedTeacherName !== undefined ? normalizedData.assignedTeacherName : existing.assignedTeacherName,
                             };
                         }
                     }
@@ -1060,34 +1062,35 @@ export const updateUserPermissions = async (userId: string, role: 'student' | 't
 export const assignStudentTeacher = async (studentId: string, teacherId: string | null): Promise<StudentUser> => {
     const user = dbMock.dbAssignStudentTeacher(studentId, teacherId);
     if (user) {
-        await syncUserToFirestore(user, 'student');
-        if (db && user.email) {
-            try {
-                const usersRef = collection(db, 'users');
-                const studentsRef = collection(db, 'students');
-                const [qUsers, qStudents] = await Promise.all([
-                    getDocs(query(usersRef, where('email', '==', user.email))).catch(() => null),
-                    getDocs(query(studentsRef, where('email', '==', user.email))).catch(() => null)
-                ]);
-                const batchUpdates: Promise<any>[] = [];
-                const teacher = teacherId ? (dbMock.teachersData || []).find(t => t.id === teacherId) : null;
-                const updatePayload = {
-                    assignedTeacherId: teacherId ? teacher?.id || teacherId : null,
-                    assignedTeacherName: teacherId ? teacher?.name || teacherId : null,
-                    updatedAt: serverTimestamp()
-                };
-                qUsers?.docs?.forEach(d => {
-                    batchUpdates.push(setDoc(doc(db, 'users', d.id), updatePayload, { merge: true }));
-                });
-                qStudents?.docs?.forEach(d => {
-                    batchUpdates.push(setDoc(doc(db, 'students', d.id), updatePayload, { merge: true }));
-                });
-                await Promise.all(batchUpdates);
-            } catch (e) {
-                console.warn('Failed to batch sync student teacher assignment in Firestore:', e);
+        const teacher = teacherId ? (dbMock.teachersData || []).find(t => t.id === teacherId) : null;
+        const teacherName = teacherId ? teacher?.name || teacherId : null;
+        
+        await syncAssignStudentTeacherInFirestore(studentId, teacherId, teacherName);
+
+        // Complementary sync for Admin role when writing to users/ collection is authorized
+        try {
+            const currentUser = auth?.currentUser;
+            if (currentUser && currentUser.emailVerified) {
+                const tokenResult = await currentUser.getIdTokenResult().catch(() => null);
+                const isAdmin = tokenResult?.claims?.role === 'admin' || Boolean(tokenResult?.claims?.isAdmin);
+                if (isAdmin && db && user.email) {
+                    const usersRef = collection(db, 'users');
+                    const qUsers = await getDocs(query(usersRef, where('email', '==', user.email))).catch(() => null);
+                    if (qUsers && qUsers.docs && qUsers.docs.length > 0) {
+                        const updatePayload = {
+                            assignedTeacherId: teacherId || null,
+                            assignedTeacherName: teacherName || null,
+                            updatedAt: serverTimestamp()
+                        };
+                        await Promise.all(
+                            qUsers.docs.map(d => setDoc(doc(db, 'users', d.id), updatePayload, { merge: true }))
+                        );
+                    }
+                }
             }
+        } catch (adminSyncErr) {
+            console.warn('Optional admin user sync warning in assignStudentTeacher:', adminSyncErr);
         }
-        await syncConversationTeacherInFirestore(studentId, teacherId, user?.assignedTeacherName || null);
     }
     return user;
 };
@@ -1525,9 +1528,9 @@ export const updateTutoringDetails = async (
 };
 
 export const deleteTutoringRequest = async (requestId: string) => {
-    const res = dbMock.dbDeleteTutoringRequest(requestId);
-    syncDeleteTutoringRequestFromFirestore(requestId).catch(console.error);
-    return res;
+    dbMock.dbDeleteTutoringRequest(requestId);
+    await syncDeleteTutoringRequestFromFirestore(requestId);
+    return { success: true };
 };
 
 // --- AGENDA, QUIZZES, ANSWERS ---
@@ -1797,7 +1800,7 @@ export const fetchClassmatesOfSameLevel = async (studentId: string): Promise<(St
 export const updateStudentNotes = async (studentId: string, notes: string): Promise<StudentUser> => {
     await apiDelay(100);
     const user = dbMock.dbUpdateStudentNotes(studentId, notes);
-    if (user) await syncUserToFirestore(user, 'student');
+    await syncUpdateStudentNotesToFirestore(studentId, notes);
     return user;
 };
 

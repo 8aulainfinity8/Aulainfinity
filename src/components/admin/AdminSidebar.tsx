@@ -156,28 +156,32 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ sidebarState, onItem
   return (
     <>
         <aside className={`sidebar-container bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 border-r border-gray-200 dark:border-slate-700 shadow-lg flex flex-col fixed h-full z-[100] transition-all duration-300 ${sidebarWidth} ${transformClass} overflow-y-auto pb-28 md:pb-4`}>
-            <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0 bg-white dark:bg-slate-800">
+            <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-slate-700 min-h-[4rem] flex-shrink-0">
                 {isSidebarOpen ? (
                     <div className="flex items-center justify-between w-full">
-                        <img 
-                            src={OFFICIAL_LOGO_PATH} 
-                            alt="AulaInfinity Logo" 
-                            className="h-9 object-contain bg-white rounded-lg p-1" 
-                            referrerPolicy="no-referrer"
-                            onError={(e) => handleImageError(e, 'full')}
-                        />
+                        <div className="bg-white rounded p-1 flex items-center justify-center inline-flex">
+                            <img 
+                                src={OFFICIAL_LOGO_PATH} 
+                                alt="AulaInfinity" 
+                                className="h-9 w-auto object-contain" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => handleImageError(e, 'full')}
+                            />
+                        </div>
                         <span className="text-xs font-semibold px-2 py-0.5 bg-primary/10 text-primary rounded-full uppercase tracking-wider">
                             {isTeacher ? t('roles.teacher') : t('roles.admin')}
                         </span>
                     </div>
                 ) : (
-                    <img 
-                        src={OFFICIAL_ICON_PATH} 
-                        alt="AulaInfinity Icon" 
-                        className="w-8 h-8 rounded-full border shadow-sm object-contain p-1 border-indigo-150 bg-white" 
-                        referrerPolicy="no-referrer"
-                        onError={(e) => handleImageError(e, 'icon')}
-                    />
+                    <div className="bg-white rounded p-1 flex items-center justify-center inline-flex">
+                        <img 
+                            src={OFFICIAL_ICON_PATH} 
+                            alt="AulaInfinity Icon" 
+                            className="w-8 h-8 object-contain" 
+                            referrerPolicy="no-referrer"
+                            onError={(e) => handleImageError(e, 'icon')}
+                        />
+                    </div>
                 )}
             </div>
 

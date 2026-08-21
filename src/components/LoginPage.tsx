@@ -289,15 +289,17 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="w-full max-w-4xl mx-auto pt-8 sm:pt-0">
-                <Link to={ROUTES.LANDING} className="flex items-center justify-center mb-8 hover:opacity-90 transition-opacity relative z-10 min-h-[60px]">
-                    <img 
-                        src={OFFICIAL_LOGO_PATH} 
-                        alt="AulaInfinity Logo" 
-                        className="h-14 md:h-16 w-auto object-contain block bg-white p-2 rounded-xl shadow-md" 
-                        referrerPolicy="no-referrer"
-                        loading="eager"
-                        onError={(e) => handleImageError(e, 'full')}
-                    />
+                <Link to={ROUTES.LANDING} className="flex items-center justify-center mb-8 hover:opacity-90 transition-opacity relative z-10">
+                    <div className="bg-white rounded-xl p-3 flex items-center justify-center inline-flex">
+                        <img 
+                            src={OFFICIAL_LOGO_PATH} 
+                            alt="AulaInfinity" 
+                            className="max-w-full h-14 sm:h-16 w-auto object-contain block" 
+                            referrerPolicy="no-referrer"
+                            loading="eager"
+                            onError={(e) => handleImageError(e, 'full')}
+                        />
+                    </div>
                 </Link>
 
                 <div className="premium-card shadow-2xl flex flex-col md:flex-row overflow-hidden border-none">

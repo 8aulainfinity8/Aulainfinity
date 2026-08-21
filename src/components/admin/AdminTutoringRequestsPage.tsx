@@ -25,6 +25,7 @@ import { FailureState } from '../ui/FailureState';
 import { EmptyState } from '../ui/EmptyState';
 import { VoiceGroupCall } from '../VoiceGroupCall';
 import { isTeacherMatchForSubject, isTutoringRequestForTeacher } from '../../utils/tutoringHelpers';
+import { useAuthorization } from '../../hooks/useAuthorization';
 
 
 export const AdminTutoringRequestsPage: React.FC = () => {
@@ -32,6 +33,7 @@ export const AdminTutoringRequestsPage: React.FC = () => {
     const handleBack = useBackNavigation('/admin/dashboard');
     const { addToast } = useContext(NotificationContext);
     const { user } = useContext(AuthContext);
+    const { isAdmin } = useAuthorization();
     const isTeacher = user?.role === 'teacher';
     const isApprovedTeacher = isTeacher ? (user as any).isApprovedForTutoring === true : true;
 
@@ -191,7 +193,9 @@ export const AdminTutoringRequestsPage: React.FC = () => {
         string,
         { previousRequests: TutoringRequest[] | undefined }
     >({
-        mutationFn: (requestId: string) => api.deleteTutoringRequest(requestId),
+        mutationFn: async (requestId: string) => {
+            await api.deleteTutoringRequest(requestId);
+        },
         onMutate: async (requestIdToDelete) => {
             await queryClient.cancelQueries({ queryKey: ['tutoringRequests'] });
             const previousRequests = queryClient.getQueryData<TutoringRequest[]>(['tutoringRequests']);
@@ -791,16 +795,18 @@ export const AdminTutoringRequestsPage: React.FC = () => {
                                                 Completar
                                             </button>
                                         )}
-                                        <button
-                                            onClick={() => {
-                                                if (!checkApproval()) return;
-                                                setRequestToDelete({ id: req.id, studentName: req.studentName });
-                                            }}
-                                            className="p-1.5 text-sm font-semibold rounded-md transition-colors bg-red-100 text-red-700 hover:bg-red-200 flex-shrink-0"
-                                            aria-label="Eliminar solicitud"
-                                        >
-                                            <TrashIcon className="w-4 h-4"/>
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => {
+                                                    if (!checkApproval()) return;
+                                                    setRequestToDelete({ id: req.id, studentName: req.studentName });
+                                                }}
+                                                className="p-1.5 text-sm font-semibold rounded-md transition-colors bg-red-100 text-red-700 hover:bg-red-200 flex-shrink-0"
+                                                aria-label="Eliminar solicitud"
+                                            >
+                                                <TrashIcon className="w-4 h-4"/>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>

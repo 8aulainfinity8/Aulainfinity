@@ -69,12 +69,12 @@ export const LandingPage: React.FC = () => {
         <div className="bg-gray-50 dark:bg-slate-900 min-h-screen text-slate-900 dark:text-slate-50 overflow-x-hidden">
             {/* Header */}
             <header className="container mx-auto px-6 py-6 flex flex-col sm:flex-row justify-center sm:justify-between items-center gap-6 relative z-50">
-                <div className="flex justify-center w-full sm:w-auto min-h-[79px]">
+                <div className="bg-white rounded-2xl p-4 flex items-center justify-center w-full sm:w-auto">
                     <img 
                         src={OFFICIAL_LOGO_PATH} 
-                        alt="AulaInfinity Logo" 
+                        alt="AulaInfinity" 
                         id="landing-header-logo"
-                        className="h-[79px] w-auto object-contain block opacity-100 visible bg-white p-2 rounded-xl shadow-sm" 
+                        className="max-w-full h-auto object-contain max-h-20 md:max-h-24 lg:max-h-28" 
                         referrerPolicy="no-referrer"
                         loading="eager"
                         onError={(e) => handleImageError(e, 'full')}
@@ -257,11 +257,11 @@ export const LandingPage: React.FC = () => {
 
             {/* Footer */}
             <footer className="bg-white dark:bg-slate-800 text-center py-8">
-                 <div className="flex items-center justify-center mb-4">
+                 <div className="bg-white rounded-xl p-2 flex items-center justify-center mb-4 inline-flex">
                      <img 
                          src={OFFICIAL_LOGO_PATH}
-                          alt="AulaInfinity Logo" 
-                         className="h-10 object-contain bg-white p-1 rounded-lg" 
+                         alt="AulaInfinity" 
+                         className="h-10 max-w-full w-auto object-contain" 
                          referrerPolicy="no-referrer"
                          onError={(e) => handleImageError(e, 'full')}
                      />

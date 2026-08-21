@@ -98,7 +98,6 @@ import {
     syncStudentPaymentToFirestore,
     syncStudentExpenseToFirestore,
     syncSubmitTutoringRequestToFirestore,
-    syncDeleteTutoringRequestFromFirestore,
     syncUserSeenStatesToFirestore,
     syncMarkPeerConversationAsReadInFirestore
 } from './firestoreSync';
@@ -1947,7 +1946,6 @@ export const dbDeleteTutoringRequest = (requestId: string): void => {
         }
     }
     markItemAsDeleted(requestId, 'tutoring');
-    syncDeleteTutoringRequestFromFirestore(requestId);
 };
 
 // --- AGENDA, QUIZZES, ANSWERS ---

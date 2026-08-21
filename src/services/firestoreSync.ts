@@ -33,9 +33,25 @@ export const resetFirestoreSync = () => {
     activeUnsubscribes = [];
 };
 
+const isCurrentUserAdmin = async (): Promise<boolean> => {
+    try {
+        const currentUser = auth.currentUser;
+        if (!currentUser || !currentUser.emailVerified) return false;
+        const tokenResult = await currentUser.getIdTokenResult();
+        const role = tokenResult.claims.role;
+        const isAdmin = role === 'admin' || Boolean(tokenResult.claims.isAdmin);
+        return isAdmin;
+    } catch {
+        return false;
+    }
+};
+
 export const recordDeletedItemInFirestore = async (idVal: string, type: string) => {
     try {
         if (!idVal) return;
+        const isAdmin = await isCurrentUserAdmin();
+        if (!isAdmin) return;
+
         const cleanId = String(idVal).replace(/[^a-zA-Z0-9_-]/g, '_');
         const docId = `${type}_${cleanId}`;
         await safeSetDoc(doc(db, 'firestore_deleted_items', docId), {
@@ -43,8 +59,10 @@ export const recordDeletedItemInFirestore = async (idVal: string, type: string) 
             type,
             deletedAt: serverTimestamp()
         });
-    } catch (e) {
-        console.warn(`[FirestoreSync] Failed to record deleted item ${idVal} (${type}):`, e);
+    } catch (e: any) {
+        if (e?.code !== 'permission-denied') {
+            console.warn(`[FirestoreSync] Failed to record deleted item ${idVal} (${type}):`, e);
+        }
     }
 };
 
@@ -1966,16 +1984,12 @@ export const deleteCourseFromFirestore = async (courseId: string) => {
 
 export const syncDeleteTutoringRequestFromFirestore = async (requestId: string) => {
     try {
-        await Promise.race([
-            Promise.all([
-                deleteFromCollectionRobust('firestore_tutoring_requests', requestId),
-                recordDeletedItemInFirestore(requestId, 'tutoring')
-            ]),
-            new Promise(resolve => setTimeout(resolve, 2000))
-        ]);
+        await deleteFromCollectionRobust('firestore_tutoring_requests', requestId);
+        await recordDeletedItemInFirestore(requestId, 'tutoring');
         console.log(`[FirestoreSync] Deleted tutoring request ${requestId} from Firestore`);
-    } catch (e) {
-        console.warn('Failed syncDeleteTutoringRequestFromFirestore:', e);
+    } catch (e: any) {
+        console.warn(`Failed syncDeleteTutoringRequestFromFirestore for ${requestId}:`, e?.message || e);
+        throw e;
     }
 };
 
@@ -2244,3 +2258,22 @@ export const syncUserSeenStatesToFirestore = async (stateData: any) => {
         console.warn('Failed to save user seen states to Firestore:', e);
     }
 };
+
+export const syncUpdateStudentNotesToFirestore = async (studentId: string, notes: string) => {
+    const docRef = doc(db, 'students', studentId);
+    await safeSetDoc(docRef, {
+        adminNotes: notes,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+};
+
+export const syncAssignStudentTeacherInFirestore = async (studentId: string, teacherId: string | null, teacherName?: string | null) => {
+    const docRef = doc(db, 'students', studentId);
+    await safeSetDoc(docRef, {
+        assignedTeacherId: teacherId || null,
+        assignedTeacherName: teacherName || null,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+    await syncConversationTeacherInFirestore(studentId, teacherId, teacherName || null);
+};
+
